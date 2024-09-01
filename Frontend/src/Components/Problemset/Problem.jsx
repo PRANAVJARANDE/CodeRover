@@ -74,7 +74,7 @@ function Problem() {
             </div>
 
             <div className="w-1/2 min-h-screen p-7 bg-gray-900 ml-3 rounded-lg">
-                <EditorBox/>
+                <EditorBox problem={problem}/>
             </div>
         </div>
     );

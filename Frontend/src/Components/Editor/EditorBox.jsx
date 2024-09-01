@@ -5,7 +5,7 @@ import { isLoggedIn } from '../../Services/Auth.service.js';
 import Loading from '../Loading/Loading.jsx';
 import {Link} from 'react-router-dom'
 
-function EditorBox() {
+function EditorBox({problem}) {
     if (!isLoggedIn()) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-800 rounded-lg">
@@ -104,7 +104,7 @@ function EditorBox() {
                 language={language}
                 value={code}
                 theme={theme}
-                onChange={(value) => setCode(value)}
+                onChange={(e) => setCode(e)}
                 options={{
                     fontSize: 16,
                     minimap: { enabled: false },
@@ -115,6 +115,17 @@ function EditorBox() {
                 className="rounded-lg overflow-hidden border border-gray-700"
             />
             </div> 
+            <div className="flex space-x-4 mt-4">
+            <button className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+                Run
+            </button>
+            {problem && (
+                <button className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+                    Submit
+                </button>
+    )}
+</div>
+
         </div>
     );
 }
