@@ -37,8 +37,8 @@ const Header = ({ user }) => {
             </div>
           ) : (
             <div className="flex items-center space-x-4">
-              <NavLink to="/login" className="text-lg text-white bg-sky-500 hover:bg-yellow-500 transition duration-300 py-2 px-4 rounded-md shadow-md">Login</NavLink>
-              <NavLink to="/register" className="text-lg text-white bg-sky-500 hover:bg-yellow-500 transition duration-300 py-2 px-4 rounded-md shadow-md">Register</NavLink>
+              <NavLink to="/login" className="text-lg text-white bg-blue-600 hover:bg-yellow-500 transition duration-300 py-2 px-4 rounded-md shadow-md">Login</NavLink>
+              <NavLink to="/register" className="text-lg text-white bg-blue-600 hover:bg-yellow-500 transition duration-300 py-2 px-4 rounded-md shadow-md">Register</NavLink>
             </div>
           )}
         </div>

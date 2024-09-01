@@ -34,8 +34,8 @@ let router=createBrowserRouter(
 )
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <Toaster position='bottom-right' toastOptions={{duration:3000}}/>
-    <RouterProvider router={router}/>
-  </StrictMode>,
+    <StrictMode>
+      <Toaster position='bottom-right' toastOptions={{duration:3000}}/>
+      <RouterProvider router={router}/>
+    </StrictMode>
 )

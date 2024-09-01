@@ -224,4 +224,52 @@ const updateAvatar =asyncHandler(async(req,res)=>{
     return res.status(200).json(new ApiResponse(200,user,"Avatar updated Successfully"));
 });
 
-export {registerUser,loginUser,logoutUser,refreshAccessToken,getCurrentUser,updateAvatar};
+const setdefaultlang = asyncHandler(async (req, res) => {
+    if (!req.user)return res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+    const {lang}=req.params;
+    try {
+        const newuser = await User.findByIdAndUpdate(req.user._id,
+            {
+                default_language: lang
+            },
+            {new:true});
+        if (!newuser)return res.status(500).json(new ApiResponse(500, null, "Server error"));
+        return res.status(200).json(new ApiResponse(200, newuser, "Default language updated"));
+    } catch (error) {
+        return res.status(500).json(new ApiResponse(500, null, "Server error"));
+    }
+    });
+
+const settemplate = asyncHandler(async (req, res) => {
+    const user = req.user;
+    if (!user) return res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+    const {lang}=req.params;
+    const {code} = req.body;
+    try {
+        const newuser = await User.findByIdAndUpdate(req.user._id, 
+            {
+                $set: {
+                    [`template.${lang}`]: code
+                }
+            }
+        , { new: true });
+        if (!newuser) return res.status(500).json(new ApiResponse(500, null, "Server error"));
+        return res.status(200).json(new ApiResponse(200, newuser, "Template updated"));
+    } catch (error) {
+        return res.status(500).json(new ApiResponse(500, null, "Server error"));
+    }
+});
+
+const gettemplateandlang = asyncHandler(async (req, res) => {
+    const user = req.user;
+    if (!user) return res.status(401).json(new ApiResponse(401, null, "Unauthorized"));
+    try {
+        const data = await User.findById(req.user?._id).select("template default_language");
+        if (!data) return res.status(500).json(new ApiResponse(500, null, "Server error"));
+        return res.status(200).json(new ApiResponse(200, data, "Template and Language fetched"));
+    } catch (error) {
+        return res.status(500).json(new ApiResponse(500, null, "Server error"));
+    }
+});
+
+export {registerUser,loginUser,logoutUser,refreshAccessToken,getCurrentUser,updateAvatar,setdefaultlang,settemplate,gettemplateandlang};

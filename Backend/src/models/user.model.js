@@ -2,6 +2,26 @@ import mongoose,{Schema} from 'mongoose'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 
+const templateSchema = new mongoose.Schema({
+    cpp: {
+        type: String,
+        default: `#include<bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Your code here\n\n    return 0;\n}`  
+    },
+    c: {
+        type: String,
+        default: `#include<stdio.h>\n\nint main() {\n    // Your code here\n\n    return 0;\n}`
+    },
+    java: {
+        type: String,
+        default: `public class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}`
+    },
+    python: {
+        type: String,
+        default: `def main():\n    # Your code here\n    pass\n\nif __name__ == "__main__":\n    main()`
+    }
+});
+
+
 const userSchema=new Schema({
     username:{
         type:String,
@@ -33,6 +53,15 @@ const userSchema=new Schema({
     },
     refreshToken:{
         type:String,
+    },
+    default_language:{
+        type:String,
+        default:'cpp',
+    },
+    template:{
+        type:templateSchema,
+        required:true,
+        default: () => ({})
     }
 },{timestamps:true});
 

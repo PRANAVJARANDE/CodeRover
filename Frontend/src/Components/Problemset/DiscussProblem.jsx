@@ -12,8 +12,7 @@ function DiscussProblem({id}) {
     });
     return (
         <div className='min-h-screen flex flex-col'>
-            <div className='flex-grow'>
-            <div className="space-y-6 mt-4">
+            <div className="space-y-6 mt-4 mb-10">
                 {tweets.length > 0 ? (
                     tweets.map((tweet, index) => (
                         <div key={index} className="bg-gray-700 p-6 rounded-lg shadow-md">
@@ -36,8 +35,7 @@ function DiscussProblem({id}) {
                     <div className="text-gray-400">Nothing Discussed Yet...</div>
                 )}
             </div>
-            </div>
-            <div className='bg-black p-4 my-6 rounded-lg align-sel'>
+            <div className='bg-black p-4 my-6 rounded-lg'>
                 <Reply replyOf={id}/>
             </div>
         </div>
