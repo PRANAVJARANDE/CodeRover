@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { ApiError } from '../utils/ApiError.js';
 import { fileURLToPath } from 'url';
 
@@ -17,18 +16,27 @@ function getExtension(language) {
     }
 }
 
-export const saveCodeFiles = (code, userInput, language) => {
-        try {
-            const filename = language==='java' ? 'Main':uuidv4();
-            const codeFilePath = path.join(__dirname, `../../${filename}.${getExtension(language)}`);
-            const userInputFilePath = path.join(__dirname, `../../${filename}.txt`);
-            fs.writeFileSync(codeFilePath, code);
-            fs.writeFileSync(userInputFilePath, userInput);
-            console.log(`Code and user input saved successfully with filename: ${filename}`);
-            return filename; 
-        } catch (error) {
-            console.error("Error saving code and user input:", error);
-            throw new ApiError(500,"Something went wrong while generating file");
-        }
+export const saveCodeFiles = (code,language,filename) => {
+    try {
+        const codeFilePath = path.join(__dirname, `../../${filename}.${getExtension(language)}`);
+        fs.writeFileSync(codeFilePath, code);
+        console.log(`Code saved successfully with filename: ${filename}`);
+    } catch (error) {
+        console.error("Error saving code and user input:", error);
+        throw new ApiError(500,"Something went wrong while generating file");
+    }
 };
+
+export const saveInputFiles = (userInput,filename) => {
+    try {
+        const userInputFilePath = path.join(__dirname, `../../${filename}.txt`);
+        fs.writeFileSync(userInputFilePath, userInput);
+        console.log(`User input saved successfully with filename: ${filename}`);
+        return filename; 
+    } catch (error) {
+        console.error("Error saving code and user input:", error);
+        throw new ApiError(500,"Something went wrong while generating file");
+    }
+};
+
 

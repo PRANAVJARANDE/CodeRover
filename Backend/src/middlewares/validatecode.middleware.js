@@ -10,17 +10,30 @@ const forbiddenWords = {
     ]
 };
 
-const validateCode = (language, code, userInput) => {
+const validateCode = (language, code) => {
     const wordsToCheck = forbiddenWords[language];
     if (!wordsToCheck) {
         throw new ApiError(400,"Unsupported Language");
     }
 
     for (const word of wordsToCheck) {
-        if (code.includes(word) || (userInput && userInput.includes(word))) {
-            throw new ApiError(400,`${language.toUpperCase()} code or user input contains forbidden word: ${word}`);
+        if (code.includes(word)) {
+            throw new ApiError(400,`${language.toUpperCase()} code contains forbidden word: ${word}`);
         }
     }
 };
 
-export { validateCode };
+const validateInput = (language, userInput) => {
+    const wordsToCheck = forbiddenWords[language];
+    if (!wordsToCheck) {
+        throw new ApiError(400,"Unsupported Language");
+    }
+
+    for (const word of wordsToCheck) {
+        if (userInput && userInput.includes(word)) {
+            throw new ApiError(400,`${language.toUpperCase()} user input contains forbidden word: ${word}`);
+        }
+    }
+};
+
+export {validateCode,validateInput};

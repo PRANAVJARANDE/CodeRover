@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { saveInputFiles } from './saveCodeFile.middleware.js';
 
 const execPromise = promisify(exec);
 
@@ -40,7 +41,7 @@ function getRunCMD(containerID,filename,language){
 
 const executeDocker = async(filename, language,res) => {
     try {
-        // Run the Docker container with the gcc image
+        // Run the Docker container 
         const response = await execPromise(`docker run -d ${getDockerImage(language)}:latest sleep infinity`);
         const containerID = response.stdout.trim();
         console.log("Container ID:", containerID);
@@ -74,4 +75,54 @@ const executeDocker = async(filename, language,res) => {
 
 export const runCompilerDockerContainer = (filename,language,res)=>{
     executeDocker(filename,language,res);
+};
+
+const executeDockerfor_Example_cases = async (examplecases, language, filename, res) => {
+    try {
+        const response = await execPromise(`docker run -d ${getDockerImage(language)}:latest sleep infinity`);
+        const containerID = response.stdout.trim();
+        console.log("Container ID:", containerID);
+    
+        await execPromise(`docker exec ${containerID} sh -c "mkdir -p /usr/src/app"`);
+        await execPromise(`docker cp ${filename}.${getExtension(language)} ${containerID}:/usr/src/app/`);
+        
+        let res_output = [];
+        for (const x of examplecases) {
+            saveInputFiles(x.input, filename);
+            await execPromise(`docker cp ${filename}.txt ${containerID}:/usr/src/app/`);
+            const result = await execPromise(getRunCMD(containerID, filename, language));
+            await execPromise(`rm ${filename}.txt`);
+            
+            const output = result.stdout.trim();
+            const expectedOutput = x.output.trim();
+            const isMatch = output === expectedOutput;
+
+            res_output.push({
+                input: x.input,
+                expectedOutput,
+                actualOutput: output,
+                isMatch,
+            });
+
+            console.log(`Input: ${x.input}, Expected: ${expectedOutput}, Actual: ${output}, Match: ${isMatch}`);
+        }
+
+        await execPromise(`rm ${filename}.${getExtension(language)}`);
+        await execPromise(`docker rm -f ${containerID}`);
+
+        res.status(201).json(new ApiResponse(200, res_output, "Executed Successfully"));
+    } catch (error) {
+        console.error("Error:", error);
+        try {
+            await execPromise(`docker rm -f ${containerID}`);
+            await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
+        } catch (removeError) {
+            console.error('Error removing files:', removeError);
+        }
+        res.status(500).json({ stderr: error.stderr });
+    }
+};
+
+export const runExampleCasesDockerContainer = (examplecases, language, filename, res) => {
+    executeDockerfor_Example_cases(examplecases, language, filename, res);
 };
