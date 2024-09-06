@@ -36,11 +36,11 @@ const solutionSchema = new mongoose.Schema({
 
 const testCaseSchema = new mongoose.Schema({
     input: {
-        type: [mongoose.Schema.Types.Mixed],
+        type: String,
         required: true
     },
     output: {
-        type: mongoose.Schema.Types.Mixed,
+        type: String,
         required: true
     }
 });

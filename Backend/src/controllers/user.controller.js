@@ -123,6 +123,7 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
 
 const getCurrentUser = asyncHandler(async (req, res) => {
     if (!req.user) return res.status(400).json(new ApiResponse(400, null, "User not authenticated"));
+
     const curruser = await User.aggregate([
         {
             $match: {
@@ -162,12 +163,34 @@ const getCurrentUser = asyncHandler(async (req, res) => {
                                 $first: "$problemDetails.difficulty"
                             }
                         }
+                    },
+                    {
+                        $group: {
+                            _id: "$problem",
+                            submissions: { $push: "$$ROOT" }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'problems',
+                            localField: '_id',
+                            foreignField: '_id',
+                            as: 'problemDetails'
+                        }
+                    },
+                    {
+                        $unwind: "$problemDetails"
+                    },
+                    {
+                        $addFields: {
+                            difficulty: "$problemDetails.difficulty"
+                        }
                     }
                 ]
             }
         },
         {
-            $lookup:{
+            $lookup: {
                 from: 'tweets',
                 localField: '_id',
                 foreignField: 'owner',
@@ -206,9 +229,12 @@ const getCurrentUser = asyncHandler(async (req, res) => {
             }
         }
     ]);
-    if(curruser?.length==0)return res.status(400).json(new ApiResponse(400, {}, "User Does Not exist"));
+
+    if (curruser?.length == 0) return res.status(400).json(new ApiResponse(400, {}, "User Does Not exist"));
+
     return res.status(200).json(new ApiResponse(200, curruser[0], "User Fetched Successfully"));
 });
+
 
 const updateAvatar =asyncHandler(async(req,res)=>{
     const avatarLocalPath=req.file?.path;

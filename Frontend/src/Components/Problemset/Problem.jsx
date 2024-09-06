@@ -6,6 +6,7 @@ import Solution from './Solution.jsx';
 import Description from './Description.jsx';
 import DiscussProblem from './DiscussProblem.jsx';
 import EditorBox from '../Editor/EditorBox.jsx';
+import AllSubmissions from './AllSubmissions.jsx';
 
 const difficultyColors = {
     easy: 'bg-green-500 text-white',
@@ -70,7 +71,7 @@ function Problem() {
                 {activeTab === 'description' && (<Description problem={problem}/>)}
                 {activeTab === 'solution' && (<Solution solution={problem.solution}/>)}
                 {activeTab === 'discuss' && (<DiscussProblem id={id}/>)}
-                {activeTab === 'submissions' && (<></>)}
+                {activeTab === 'submissions' && (<AllSubmissions id={id}/>)}
             </div>
 
             <div className="w-1/2 min-h-screen p-7 bg-gray-900 ml-3 rounded-lg">

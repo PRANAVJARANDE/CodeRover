@@ -34,7 +34,7 @@ export const saveInputFiles = (userInput,filename) => {
         console.log(`User input saved successfully with filename: ${filename}`);
         return filename; 
     } catch (error) {
-        console.error("Error saving code and user input:", error);
+        console.error("Error saving user input:", error);
         throw new ApiError(500,"Something went wrong while generating file");
     }
 };

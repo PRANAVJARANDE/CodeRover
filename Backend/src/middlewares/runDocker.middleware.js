@@ -39,11 +39,29 @@ function getRunCMD(containerID,filename,language){
     }
 }
 
-const executeDocker = async(filename, language,res) => {
+const formatErrorMessage = (stderr) => {
+    const lines = stderr.split('\n');
+    const errorLines = [];
+    const errorPattern = /\/usr\/src\/app\/[\w-]+\.cpp:(\d+):\d+:\s+(error|warning):\s+(.+)/;
+    lines.forEach(line => {
+        const match = line.match(errorPattern);
+        if (match) {
+            const lineNumber = match[1];
+            const errorType = match[2];
+            const errorMessage = match[3];
+            errorLines.push(`Line ${lineNumber} - ${errorType}: ${errorMessage}`);
+        }
+    });
+    return errorLines.length ? errorLines.join('\n') : 'No errors found';
+};
+
+
+export const runCompilerDockerContainer = async(filename, language,res) => {
+    let containerID=null;
     try {
         // Run the Docker container 
         const response = await execPromise(`docker run -d ${getDockerImage(language)}:latest sleep infinity`);
-        const containerID = response.stdout.trim();
+        containerID = response.stdout.trim();
         console.log("Container ID:", containerID);
 
         // Create the directory if it does not exist
@@ -57,9 +75,6 @@ const executeDocker = async(filename, language,res) => {
         const result = await execPromise(getRunCMD(containerID,filename,language));
         console.log(result);
 
-        // Clean up: remove the container and files
-        await execPromise(`docker rm -f ${containerID}`);
-        await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
         res.status(201).json(new ApiResponse(200, result.stdout, "Executed Successfully"));
     } catch (error) {
         console.error("Error:", error);
@@ -70,59 +85,185 @@ const executeDocker = async(filename, language,res) => {
             console.error('Error removing files:', removeError);
         }
         res.status(500).json({ stderr: error.stderr });
+
+    } finally {
+        if (containerID) {
+            try {
+                await execPromise(`docker rm -f ${containerID}`);
+            } catch (removeError) {
+                console.error('Error removing Docker container:', removeError);
+            }
+        }
+        try {
+            await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
+        } catch (removeFileError) {
+            console.error('Error removing files:', removeFileError);
+        }
     }
 };
 
-export const runCompilerDockerContainer = (filename,language,res)=>{
-    executeDocker(filename,language,res);
-};
+export const runExampleCasesDockerContainer = async (examplecases, language, filename) => {
+    let containerID = null;
+    const TIME_LIMIT = 20000; 
+    let res_output = [];
 
-const executeDockerfor_Example_cases = async (examplecases, language, filename, res) => {
     try {
         const response = await execPromise(`docker run -d ${getDockerImage(language)}:latest sleep infinity`);
-        const containerID = response.stdout.trim();
+        containerID = response.stdout.trim();
         console.log("Container ID:", containerID);
-    
         await execPromise(`docker exec ${containerID} sh -c "mkdir -p /usr/src/app"`);
         await execPromise(`docker cp ${filename}.${getExtension(language)} ${containerID}:/usr/src/app/`);
-        
-        let res_output = [];
-        for (const x of examplecases) {
+        for (const x of examplecases) 
+        {
             saveInputFiles(x.input, filename);
             await execPromise(`docker cp ${filename}.txt ${containerID}:/usr/src/app/`);
-            const result = await execPromise(getRunCMD(containerID, filename, language));
-            await execPromise(`rm ${filename}.txt`);
-            
-            const output = result.stdout.trim();
-            const expectedOutput = x.output.trim();
-            const isMatch = output === expectedOutput;
+            const executionPromise = execPromise(getRunCMD(containerID, filename, language));
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Time Limit Exceeded")), TIME_LIMIT)
+            );
 
-            res_output.push({
-                input: x.input,
-                expectedOutput,
-                actualOutput: output,
-                isMatch,
-            });
+            try {
+                const result = await Promise.race([executionPromise, timeoutPromise]); 
+                const output = result.stdout.trim();
+                const expectedOutput = x.output.trim();
+                const isMatch = output === expectedOutput;
 
-            console.log(`Input: ${x.input}, Expected: ${expectedOutput}, Actual: ${output}, Match: ${isMatch}`);
+                res_output.push({
+                    input: x.input,
+                    expectedOutput,
+                    actualOutput: output,
+                    isMatch,
+                });
+
+                console.log(`Input: ${x.input}, Expected: ${expectedOutput}, Actual: ${output}, Match: ${isMatch}`);
+            } catch (execError) {
+                if (execError.message === "Time Limit Exceeded") {
+                    console.error('Error: Time Limit Exceeded');
+                    return { statusCode: 403, data:"TLE"}; 
+                } else {
+                    console.error('Execution error:', execError);
+                    throw execError; 
+                }
+            } finally {
+                try {
+                    await execPromise(`docker exec ${containerID} rm -f /usr/src/app/${filename}.txt`);
+                } catch (removeError) {
+                    console.error('Error removing input file inside Docker:', removeError);
+                }
+            }
         }
 
-        await execPromise(`rm ${filename}.${getExtension(language)}`);
-        await execPromise(`docker rm -f ${containerID}`);
+        await execPromise(`docker exec ${containerID} rm -f /usr/src/app/${filename}.${getExtension(language)}`);
+        return { statusCode: 200, data: res_output };
 
-        res.status(201).json(new ApiResponse(200, res_output, "Executed Successfully"));
     } catch (error) {
-        console.error("Error:", error);
+        // Handle general errors and clean up
         try {
-            await execPromise(`docker rm -f ${containerID}`);
-            await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
+            await execPromise(`rm -f ${filename}.${getExtension(language)} ${filename}.txt`);
         } catch (removeError) {
-            console.error('Error removing files:', removeError);
+            console.error('Error removing local files during error handling:', removeError);
         }
-        res.status(500).json({ stderr: error.stderr });
+
+        // Return error response based on type
+        if (error.stderr) {
+            console.error('Standard error:', error.stderr);
+            return { statusCode: 403, data: formatErrorMessage(error.stderr) }; 
+        } else if (error.message === "Time Limit Exceeded") {
+            console.error('Error: Time Limit Exceeded');
+            return { statusCode: 403, data: "Error: Time Limit Exceeded" }; 
+        }
+
+        console.error('Server error:', error);
+        return { statusCode: 500, data: "Server error" };
+
+    } finally {
+        if (containerID) {
+            try {
+                await execPromise(`docker rm -f ${containerID}`);
+                await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
+                console.log('Docker container removed successfully:', containerID);
+            } catch (removeError) {
+                console.error('Error removing Docker container:', removeError);
+            }
+        }
     }
 };
 
-export const runExampleCasesDockerContainer = (examplecases, language, filename, res) => {
-    executeDockerfor_Example_cases(examplecases, language, filename, res);
-};
+export const runTestCasesDokerContainer= async(test_cases,language,filename)=>{
+        let containerID = null;
+        const TIME_LIMIT = 30000;
+        try {
+            const response = await execPromise(`docker run -d ${getDockerImage(language)}:latest sleep infinity`);
+            containerID = response.stdout.trim();
+            console.log("Container ID:", containerID);
+            await execPromise(`docker exec ${containerID} sh -c "mkdir -p /usr/src/app"`);
+            await execPromise(`docker cp ${filename}.${getExtension(language)} ${containerID}:/usr/src/app/`);
+            let failedTestCase=null;
+            for (const x of test_cases) 
+            {
+                if(failedTestCase)break;
+                saveInputFiles(x.input, filename);
+                await execPromise(`docker cp ${filename}.txt ${containerID}:/usr/src/app/`);
+                const executionPromise = execPromise(getRunCMD(containerID, filename, language));
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Time Limit Exceeded")), TIME_LIMIT)
+                );
+
+                try {
+                    const result = await Promise.race([executionPromise, timeoutPromise]);
+                    const output = result.stdout.trim();
+                    const expectedOutput = x.output.trim();
+                    const isMatch = output === expectedOutput;
+                    if (!isMatch && !failedTestCase) 
+                    {
+                        failedTestCase={input:x.input,output,expectedOutput};
+                    }
+                    console.log(`Test case passed. Input: ${x.input}, Output: ${output}`);
+                } catch (execError) {
+                    if (execError.message === "Time Limit Exceeded") {
+                        console.error('Error: Time Limit Exceeded');
+                        return { statusCode: 403, data:"TLE"}; 
+                    } else {
+                        console.error('Execution error:', execError);
+                        throw execError; 
+                    }
+                } finally {
+                    try {
+                        await execPromise(`docker exec ${containerID} rm -f /usr/src/app/${filename}.txt`);
+                    } catch (removeError) {
+                        console.error('Error removing input file inside Docker:', removeError);
+                    }
+                }
+            }
+            
+            await execPromise(`docker exec ${containerID} rm /usr/src/app/${filename}.${getExtension(language)}`);
+            return {statusCode: 200, data: failedTestCase};
+        } 
+        catch (error) 
+        {
+            try {
+                if (containerID) {
+                    await execPromise(`docker exec ${containerID} rm /usr/src/app/${filename}.${getExtension(language)}`);
+                }
+            } catch (removeError) {
+                console.error('Error removing files from container:', removeError);
+            }
+    
+            if (error.stderr) {
+                return { statusCode: 403, data: formatErrorMessage(error.stderr) };
+            } else if (error.message === "Time Limit Exceeded") {
+                return { statusCode: 403, data: "Time Limit Exceeded" };
+            }
+            return { statusCode: 500, data: "Server error" };
+        } finally {
+            if (containerID) {
+                try {
+                    await execPromise(`docker rm -f ${containerID}`);
+                    await execPromise(`rm ${filename}.${getExtension(language)} ${filename}.txt`);
+                } catch (removeError) {
+                    console.error('Error removing Docker container:', removeError);
+                }
+            }
+        }
+    };
+    
