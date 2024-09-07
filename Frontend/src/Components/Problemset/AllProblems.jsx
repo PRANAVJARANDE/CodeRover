@@ -2,6 +2,7 @@ import React, { useState,useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllProblemsService } from '../../Services/Problem.service';
 import Loading from '../Loading/Loading.jsx';
+import { getSolvedProblemService } from '../../Services/Submissions.service.js';
 
 
 const difficultyColors = {
@@ -16,8 +17,11 @@ const AllProblems = () => {
     const [problems,setproblems]=useState(null);
     useEffect(()=>{
         const helper=async ()=>{
-            const response=await getAllProblemsService();
-            if(response)setproblems(response);
+            const response1=await getAllProblemsService();
+            const response2=await getSolvedProblemService();
+            if(response1)setproblems(response1);
+            console.log(response2);
+            if(response2)setSolvedProblems(response2);
         }
         helper();
     },[]);
@@ -45,9 +49,8 @@ const AllProblems = () => {
                         <tbody className="divide-y divide-gray-700">
                         
                             {problems.map((problem,index) => (
-                                
                                 <tr key={problem._id} onClick={()=>{
-                                    navigate(`/problems/${problem._id}`);
+                                    navigate(`/problems/${problem._id}`, { state: { solved: solvedProblems.has(problem._id) } });
                                 }} className="hover:bg-gray-700 transition duration-300 ease-in-out">
                                     <td className="px-6 py-4 whitespace-nowrap text-md font-medium text-gray-100">
                                         {index+1}. {problem.title}
@@ -55,12 +58,22 @@ const AllProblems = () => {
                                     <td className={`px-6 py-4 whitespace-nowrap text-md text-center font-medium ${difficultyColors[problem.difficulty]}`}>
                                         {problem.difficulty}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={solvedProblems.has(problem._id)}
-                                            className="form-checkbox h-5 w-5 text-blue-500 border-gray-600 rounded"
-                                        />
+                                    <td className="px-6 py-2 whitespace-nowrap flex justify-center">
+                                        {solvedProblems.has(problem._id) &&  
+                                        <>
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className="h-9 w-9"
+                                                viewBox="0 0 20 20"
+                                                fill="green"
+                                            >
+                                                <path
+                                                fillRule="evenodd"
+                                                d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 4.707 7.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l7-7a1 1 0 000-1.414z"
+                                                clipRule="evenodd"
+                                                />
+                                            </svg>
+                                        </> }
                                     </td>
                                 </tr>
                             ))}
