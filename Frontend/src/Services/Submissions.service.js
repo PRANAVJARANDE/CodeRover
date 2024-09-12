@@ -45,8 +45,6 @@ export const getSolvedProblemService=async ()=>{
         } 
         return null;
     } catch (error) {
-        console.log(error);
-        toast.error("Serverrrrrrrrrrrr error",error);  
         return null;
     }    
 }

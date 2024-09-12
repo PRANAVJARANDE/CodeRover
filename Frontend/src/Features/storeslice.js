@@ -1,27 +1,19 @@
-import { createSlice,nanoid} from "@reduxjs/toolkit";
+import { createSlice } from '@reduxjs/toolkit';
+import { io } from 'socket.io-client';
+const backendURL = import.meta.env.VITE_BACKEND_URL_FOR_SOCKET;
+const socket = io(backendURL);
 
-const initialState = {
-    isLoggedIn: localStorage.getItem('accessToken'),
-    user:JSON.parse(localStorage.getItem('user')) || {},
-}
+const socketSlice = createSlice({
+  name: 'socket',
+  initialState: {
+    socket: socket,
+  },
+  reducers: {
+    setSocket(state, action) {
+      state.socket = action.payload;
+    },
+  },
+});
 
-export const storeSlice=createSlice({
-    name: 'store',
-    initialState,
-    reducers:{
-        makeLogin: (state,action)=>{
-            state.isLoggedIn=true;
-            state.user=action.payload
-        },
-        makeLogout:(state,action)=>{
-            state.isLoggedIn=false;
-            state.user={};
-        },
-    }
-})
-
-//EXPORTING REDUCERS
-export const {makeLogin,makeLogout,fillsubscibedChannels} =storeSlice.actions
-
-//CONNECTING STORE WITH REDUCERS
-export default storeSlice.reducer
+export const { setSocket } = socketSlice.actions;
+export default socketSlice.reducer;

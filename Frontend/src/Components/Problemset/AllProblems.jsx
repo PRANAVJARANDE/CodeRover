@@ -20,7 +20,6 @@ const AllProblems = () => {
             const response1=await getAllProblemsService();
             const response2=await getSolvedProblemService();
             if(response1)setproblems(response1);
-            console.log(response2);
             if(response2)setSolvedProblems(response2);
         }
         helper();

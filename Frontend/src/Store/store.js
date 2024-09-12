@@ -1,6 +1,10 @@
 import {configureStore} from '@reduxjs/toolkit'
-import storeReducer from '../Features/storeslice'
+import socketReducer from '../Features/storeslice'
 
-export const store=configureStore({
-    reducer: storeReducer
+const store=configureStore({
+    reducer: {
+        socket: socketReducer,
+    }
 });
+
+export default store;

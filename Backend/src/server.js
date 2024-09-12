@@ -1,14 +1,16 @@
 import connectDB from "./db/index.js";
 import dotenv from 'dotenv'
-import { app } from './app.js'
+import { createSocketServer } from "./SocketIo/SocketIo.js";
 
 dotenv.config({
     path:'./.env'
 })
 
+const server=createSocketServer();
+
 connectDB()
 .then(()=>{
-    app.listen(process.env.PORT || 8000,()=>{
+    server.listen(process.env.PORT || 8000,()=>{
         console.log(`APP IS LISTENING ON PORT ${process.env.PORT || 8000}`);
     });
 })
