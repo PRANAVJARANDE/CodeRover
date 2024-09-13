@@ -59,7 +59,7 @@ export const submitCodeService = async(language,code,problem_id)=>{
         } 
         else
         {
-            toast.error('Server Error');
+            toast.error('Wrong Answer');
             return null
         }
         
