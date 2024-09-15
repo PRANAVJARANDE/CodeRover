@@ -53,6 +53,8 @@ function EditorBox({ problem }) {
     };
 
     const clickRun = async() => {
+        setExampleCasesExecution(null);
+        setsubmissionStatus(null);
         setExecuting(true);
         const response = await runExampleCasesService(language, code, problem.example_cases);
         if (response) {
@@ -62,6 +64,8 @@ function EditorBox({ problem }) {
     };
 
     const submitCode=async()=>{
+        setExampleCasesExecution(null);
+        setsubmissionStatus(null);
         setSubmitting(true);
         const response=await submitCodeService(language,code,problem._id);
         if(response)

@@ -67,10 +67,13 @@ const runtestcases = asyncHandler(async (req, res) => {
         saveCodeFiles(code, language, filename);
         
         const submissionStatus = await runTestCasesDokerContainer(problem?.test_cases, language, filename);
+        const status=(submissionStatus.data)? false:true;
+        console.log("Submission Status: ",status);
+        console.log("Status Code: ",submissionStatus.statusCode);
         await Submission.create({
             problem: problem_id,
             madeBy: req.user._id,
-            status: submissionStatus.statusCode===201,
+            status,
             code,
             language,
         });
