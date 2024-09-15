@@ -16,6 +16,7 @@ import JoinInterview from './Components/InterviewRooms/JoinInterview.jsx'
 import {Provider} from 'react-redux'
 import store from './Store/store.js'
 import Room from './Components/InterviewRooms/Room.jsx'
+import Loading from './Components/Loading/Loading.jsx'
 
 
 let router=createBrowserRouter(
@@ -31,7 +32,8 @@ let router=createBrowserRouter(
         <Route path='/join-interview' element=<JoinInterview/>/>
         <Route path='/host-interview' element=<Home/>/>
         <Route path='/editprofile' element=<EditProfile/>/>
-        <Route path="/problems/:id" element={<Problem/>} />
+        <Route path="/problems/:id" element={<Problem/>}/>
+        <Route path='/loading' element={<Loading/>}/>
       </Route>
       <Route path='/room/:roomId' element=<Room/>/>
     </>
