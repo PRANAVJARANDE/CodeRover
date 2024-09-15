@@ -21,7 +21,7 @@ export const createSocketServer = () => {
             const {user,room}=data;
             useridToSocketIdMap.set(user._id,socket.id);
             SocketIdTouseridMap.set(socket.id,user._id);
-            console.log(user._id,room);
+            socket.join(room);
             io.to(socket.id).emit("room:join",data);
         })
         socket.on('disconnect', () => {
