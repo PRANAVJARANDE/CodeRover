@@ -52,7 +52,7 @@ const formatErrorMessage = (stderr) => {
             errorLines.push(`Line ${lineNumber} - ${errorType}: ${errorMessage}`);
         }
     });
-    return errorLines.length ? errorLines.join('\n') : 'No errors found';
+    return errorLines.length ? errorLines.join('\n') : 'Docker Connection error';
 };
 
 
@@ -167,7 +167,7 @@ export const runExampleCasesDockerContainer = async (examplecases, language, fil
         // Return error response based on type
         if (error.stderr) {
             console.error('Standard error:', error.stderr);
-            return { statusCode: 403, data: formatErrorMessage(error.stderr) }; 
+            return { statusCode: 403, data: formatErrorMessage(error.stderr)}; 
         } else if (error.message === "Time Limit Exceeded") {
             console.error('Error: Time Limit Exceeded');
             return { statusCode: 403, data: "Error: Time Limit Exceeded" }; 

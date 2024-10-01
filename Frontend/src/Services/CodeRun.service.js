@@ -16,18 +16,17 @@ export const runExampleCasesService = async (language, code, example_cases) => {
 
         const data = await response.json();
         if (response.status === 200) {
-            toast.success('Executed Successfully');
             return data.data;
         } else if (response.status === 403) {
             if(data.data.actualOutput=="TLE")toast.error('TLE');
-            else toast.error('Syntax Error');
+            else toast.error("Something went wrong");
             return data.data;
         } else {
             toast.error('Server Error');
             return null;
         }
     } catch (error) {
-        toast.error("Server Error");
+        toast.error("Server error");
         return null;
     }
 };
