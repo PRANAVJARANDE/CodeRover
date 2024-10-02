@@ -17,6 +17,7 @@ import {Provider} from 'react-redux'
 import store from './Store/store.js'
 import Room from './Components/InterviewRooms/Room.jsx'
 import Loading from './Components/Loading/Loading.jsx'
+import HostInterview from './Components/InterviewRooms/HostInterview.jsx'
 
 
 let router=createBrowserRouter(
@@ -30,7 +31,7 @@ let router=createBrowserRouter(
         <Route path='/discuss' element=<Discuss/>/>
         <Route path='/problems' element=<AllProblems/>/>
         <Route path='/join-interview' element=<JoinInterview/>/>
-        <Route path='/host-interview' element=<Home/>/>
+        <Route path='/host-interview' element=<HostInterview/>/>
         <Route path='/editprofile' element=<EditProfile/>/>
         <Route path="/problems/:id" element={<Problem/>}/>
         <Route path='/loading' element={<Loading/>}/>

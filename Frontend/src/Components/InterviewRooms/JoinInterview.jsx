@@ -11,6 +11,7 @@ function JoinInterview() {
 
     const handleJoinRoom = (data)=>{
         const {user,room}=data;
+        if(room==='')return;
         navigate(`/room/${room}`);
     }
 
@@ -38,22 +39,14 @@ function JoinInterview() {
                 {isLoggedIn() ? (
                 <div className='bg-gray-800 p-28 rounded-2xl'>
                     <form className="flex flex-col gap-6 bg-gray-900 p-12 rounded-3xl shadow-lg max-w-md mx-auto">
-                        <label
-                            htmlFor="roomId"
-                            className="text-3xl font-extrabold text-gray-100 mb-2 tracking-wide"
-                        >
+                        <label htmlFor="roomId" className="text-3xl font-extrabold text-gray-100 mb-2 tracking-wide">
                             Enter Room ID
                         </label>
-                        <input
-                            type="text"
-                            id="roomId"
-                            value={room}
-                            onChange={(e)=>{setroom(e.target.value)}}
+                        <input type="text" id="roomId" value={room} onChange={(e)=>{setroom(e.target.value)}}
                             className="px-5 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 ease-in-out placeholder-gray-400"
                             placeholder="Enter Room ID"
                         />
-                        <button
-                            onClick={handleSubmit}
+                        <button onClick={handleSubmit}
                             className="px-6 py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
                         >
                             Join Room

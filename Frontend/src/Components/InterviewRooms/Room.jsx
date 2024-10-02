@@ -66,11 +66,25 @@ function Room() {
         setExecuting(false);
     };
 
+    const [copySuccess, setCopySuccess] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(roomId)
+      .then(() => {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000); 
+      })
+      .catch(() => {
+        setCopySuccess(false);
+      });
+  };
+
+
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
       <div className='bg-gray-900 p-6 rounded-lg w-1/4'>
         <div className="flex flex-col space-y-6">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-evenly space-x-4">
           <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={()=>{
             navigate('/join-interview');
           }}>
@@ -174,16 +188,26 @@ function Room() {
     </div>
     
     <div className='w-1/4 flex flex-col h-full bg-gray-900 p-4 rounded-lg'>
-      <div className='bg-green-600 mb-6 p-2 rounded-xl'><p className="text-3xl font-bold text-center">Room: {roomId}</p></div>
+      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
+        <p className="text-3xl font-bold text-center">Room: {roomId}</p>
+        {copySuccess? <>
+          <p className="text-lg text-white text-center">Copied!</p>
+        </>:
+        <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
+          <img className='w-6' src='/copy.png'/>
+        </button>
+        }
+      </div>
       <div className="bg-gray-700 mb-6 p-4 rounded-lg">
-        <Timer/>
+        <Timer />
       </div>
       <div className="bg-gray-700 p-2 rounded-lg shadow-md flex flex-col justify-center items-center">
         <h3 className="text-lg font-semibold mb-2">Interviewee</h3>
-        <div className="bg-gray-800 h-48 w-full rounded-lg flex justify-center items-center">Video</div>
+        <div className="bg-gray-800 h-48 w-full rounded-lg flex justify-center items-center">
+          Video
+        </div>
       </div>
     </div>
-    
 </div>
 
   );
