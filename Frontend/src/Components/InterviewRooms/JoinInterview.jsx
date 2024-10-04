@@ -3,15 +3,16 @@ import { isLoggedIn } from '../../Services/Auth.service.js'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSocket } from '../../Features/useSocket.js';
 
-
 function JoinInterview() {
     const socket=useSocket();
     const navigate=useNavigate();
     const [room,setroom]=useState('');
+    const [joining,setjoining]=useState(false);
 
     const handleJoinRoom = (data)=>{
         const {user,room}=data;
         if(room==='')return;
+        setjoining(false);
         navigate(`/room/${room}`);
     }
 
@@ -20,13 +21,13 @@ function JoinInterview() {
         return ()=>{
             socket.off('room:join',handleJoinRoom);
         }
-        
     },[socket]);
 
     const handleSubmit=(e)=>{
         e.preventDefault();
         const nonparsedUser=localStorage.getItem('user');
-        const user = JSON.parse(nonparsedUser);  
+        const user = JSON.parse(nonparsedUser); 
+        setjoining(true); 
         socket.emit("room:join",{room,user});
     }
 

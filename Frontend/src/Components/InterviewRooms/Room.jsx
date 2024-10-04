@@ -6,6 +6,8 @@ import Timer from './Timer.jsx';
 import { runExampleCasesService } from '../../Services/CodeRun.service.js';
 import Executing from '../Editor/Executing.jsx'
 import ExampleCasesOutput from '../Editor/ExampleCasesOutput.jsx';
+import { useLocation } from 'react-router-dom';
+import ReactPlayer from 'react-player'
 
 function Room() {
   const defaultCodes = {
@@ -26,11 +28,34 @@ function Room() {
   const [isVideoOn, setVideoOn] = useState(false);
   const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
   const [executing, setExecuting] = useState(false);
-  const socket=useSocket();
   const navigate=useNavigate();
-  useEffect(()=>{
+  const [previlige,setprevilige]=useState(false);
+  const [remoteSocketId,setremoteSocketId]=useState(null);
+  const [requsername,setrequestusername]=useState(null);
+  const [connectionReady,setconnectionReady]=useState(false);
+  const [mystream,setMystream]=useState(null);
+  const location = useLocation();
+  const extraInfo = location.state;
 
-  },[]);
+  useEffect(()=>{
+      const nonparsedUser = localStorage.getItem('user');
+      const user = JSON.parse(nonparsedUser); 
+      if(extraInfo && extraInfo._id===user._id)setprevilige(true);   
+  })
+
+  const socket=useSocket();
+  const handleUserjoined=({user,id})=>{
+    console.log(`user ${user.fullname} joined the room`);
+    setremoteSocketId(id);
+    setrequestusername(user.fullname);
+  }
+
+  useEffect(()=>{
+    socket.on('user:joined',handleUserjoined);
+    return ()=>{
+      socket.off('user:joined',handleUserjoined);
+    }
+  },[socket,handleUserjoined]);
 
   const toggleAudio = () => {
     setAudioOn(!isAudioOn);
@@ -51,6 +76,7 @@ function Room() {
   };
 
   const handleInputChange = (index, field, value) => {
+    if(!previlige)return;
     const newCases = [...cases];
     newCases[index][field] = value;
     setCases(newCases);
@@ -79,10 +105,14 @@ function Room() {
       });
   };
 
+  const handleCallUser=async()=>{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});
+    setMystream(stream);
+  }
 
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
-      <div className='bg-gray-900 p-6 rounded-lg w-1/4'>
+      <div className='bg-gray-900 p-6 rounded-lg w-1/4 flex flex-col'>
         <div className="flex flex-col space-y-6">
         <div className="flex items-center justify-evenly space-x-4">
           <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={()=>{
@@ -130,10 +160,12 @@ function Room() {
               </div>
             </div>
           ))}</>
-              }
-            </>
             }
-      
+          </>
+          }
+          <div className="bg-gray-800 p-2 rounded-lg shadow-lg">
+            <Timer previlige={previlige} />
+          </div>
         </div>
       </div>
       </div>
@@ -198,15 +230,35 @@ function Room() {
         </button>
         }
       </div>
-      <div className="bg-gray-700 mb-6 p-4 rounded-lg">
-        <Timer />
-      </div>
-      <div className="bg-gray-700 p-2 rounded-lg shadow-md flex flex-col justify-center items-center">
-        <h3 className="text-lg font-semibold mb-2">Interviewee</h3>
-        <div className="bg-gray-800 h-48 w-full rounded-lg flex justify-center items-center">
-          Video
-        </div>
-      </div>
+      
+      {!connectionReady ? (
+        <>
+          <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-center items-center">
+            <h3 className="text-lg font-semibold mb-4 text-white">Interviewee</h3>
+            <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white">
+              <p className="text-gray-400">Video</p>
+            </div>
+            <h3 className="text-lg font-semibold mb-4 text-white">You</h3>
+            <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white">
+              <ReactPlayer playing muted height="200px" width="200px" url={mystream}/>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+            <p className="text-lg font-semibold mb-2">Join Requests-</p>
+            {remoteSocketId && (
+              <div className="flex items-center gap-4">
+                <p className="text-gray-300">{requsername} has requested</p>
+                <button onClick={handleCallUser} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out">
+                  Accept
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
 </div>
 

@@ -15,11 +15,10 @@ const generateRoomId = () => {
 function HostInterview() {
     const socket = useSocket();
     const navigate = useNavigate();
-    const [room, setRoom] = useState('');
 
     const handleJoinRoom = (data) => {
-        const { room } = data;
-        navigate(`/room/${room}`);
+        const {user,room} = data;
+        navigate(`/room/${room}`,{state:user});
     };
 
     useEffect(() => {
@@ -34,8 +33,7 @@ function HostInterview() {
         const nonparsedUser = localStorage.getItem('user');
         const user = JSON.parse(nonparsedUser);
         const randomRoomId = generateRoomId();
-        setRoom(randomRoomId);
-        socket.emit('room:join', { room: randomRoomId, user });
+        socket.emit('room:join', { room: randomRoomId, user});
     };
 
     return (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const Timer = () => {
+const Timer = ({previlige}) => {
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [inputTime, setInputTime] = useState(''); 
@@ -54,27 +54,25 @@ const Timer = () => {
   };
 
   return (
-    <div className="flex flex-col items-center bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+    <div className="flex flex-col items-center pb-2 bg-gray-800 rounded-lg text-white">
       <div className="px-4 py-2 bg-black rounded-lg text-4xl font-semibold mb-4">{formatTime(time)}</div>
-      <input
-        type="number"
-        min="0"
-        value={inputTime}
-        onChange={handleInputChange}
-        placeholder="Set time in Minutes"
-        className="p-2 rounded-md border border-gray-600 mb-4 text-black"
-      />
-      <div className="flex space-x-4 ">
-        <button onClick={handleStart} className="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300">
+      {previlige && 
+      <>
+      <div className="flex space-x-1 ">
+        <button onClick={handleStart} className="bg-green-500 text-white py-1 px-2 rounded-lg hover:bg-green-600 transition duration-300">
           Start
         </button>
-        <button onClick={handleStop} className="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition duration-300">
+        <button onClick={handleStop} className="bg-red-500 text-white py-1 px-2 rounded-lg hover:bg-red-600 transition duration-300">
           Stop
         </button>
-        <button onClick={handleReset} className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">
+        <button onClick={handleReset} className="bg-blue-500 text-white py-1 px-2 rounded-lg hover:bg-blue-600 transition duration-300">
           Reset
         </button>
+        <input type="number" min="0" value={inputTime} onChange={handleInputChange} placeholder="Mins"
+        className="px-2 py-1 w-28 rounded-md border border-gray-600 text-black"/>
       </div>
+      </>
+      }
     </div>
   );
 };
