@@ -29,7 +29,7 @@ function Room() {
 
   const [requsername,setrequestusername]=useState(null);
   const [connectionReady,setconnectionReady]=useState(false);
-  const [mystream,setMystream]=useState(null);
+  
 
   const location = useLocation();
   const extraInfo = location.state;
@@ -38,7 +38,11 @@ function Room() {
       const nonparsedUser = localStorage.getItem('user');
       const user = JSON.parse(nonparsedUser); 
       if(extraInfo && extraInfo._id===user._id)setprevilige(true);
-      else if(extraInfo)setremoteSocketId(extraInfo);
+      else if(extraInfo)
+      {
+          setremoteSocketId(extraInfo);
+          setconnectionReady(true);
+      }
   })
 
   const socket=useSocket();
@@ -63,16 +67,51 @@ function Room() {
   },[socket,handleJoinRequest]);
 
 
-  const [isAudioOn, setAudioOn] = useState(false);
-  const toggleAudio = () => {
-    console.log(`Remote User is- ${remoteSocketId} and I am ${socket.id}`)
-    setAudioOn(!isAudioOn);
-  };
+  const [mystream,setMystream]=useState(null);
+  const [isAudioOn,setAudioOn]=useState(true);
+  const [isVideoOn,setVideoOn]=useState(true);
 
-  const [isVideoOn, setVideoOn] = useState(false);
-  const toggleVideo = () => {
-    setVideoOn(!isVideoOn);
+  useEffect(() => {
+    const getMediaStream = async () => {
+      if (connectionReady) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+          setMystream(stream);
+          setAudioOn(stream.getAudioTracks()[0]?.enabled || false);
+          setVideoOn(stream.getVideoTracks()[0]?.enabled || false);
+        } catch (error) {
+          console.error('Error accessing media devices:', error);
+        }
+      }
+    };
+    getMediaStream();
+    return () => {
+      if (mystream) {
+        mystream.getTracks().forEach(track => track.stop());
+      }
+    };
+  },[connectionReady]);
+
+  const toggleAudio = () => {
+    if (mystream) {
+      const audioTrack = mystream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled; 
+        setAudioOn(audioTrack.enabled); 
+      }
+    }
   };
+  
+  const toggleVideo = () => {
+    if (mystream) {
+      const videoTrack = mystream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled; 
+        setVideoOn(videoTrack.enabled);
+      }
+    }
+  };
+  
 
   const [language, setLanguage] = useState('cpp');
   const handleLanguageChange = async (newLanguage) => {
@@ -117,19 +156,34 @@ function Room() {
       });
   };
 
-  const handleCallUser=async()=>{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});
-    setMystream(stream);
+  
+  const exitroom=()=>{
+    if (mystream) {
+      const tracks = mystream.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+      });
+    }
+    if(previlige)
+    {
+      socket.emit('host:leave',{remoteSocketId,room:roomId});
+      navigate('/host-interview');
+    }
+    else 
+    {
+      socket.emit('interviewee:leave',{remoteSocketId,room:roomId});
+      navigate('/join-interview');
+    }
+    setMystream(null);
   }
+
 
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
       <div className='bg-gray-900 p-6 rounded-lg w-1/4 flex flex-col'>
         <div className="flex flex-col space-y-6">
         <div className="flex items-center justify-evenly space-x-4">
-          <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={()=>{
-            navigate('/join-interview');
-          }}>
+          <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={exitroom}>
             <img className="h-6 w-6" src={'/endcall.png'} alt="end call" />
           </button>
           <button className={`py-2 px-4 rounded-lg shadow-md transition ${isAudioOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`} onClick={toggleAudio}>
@@ -182,54 +236,54 @@ function Room() {
       </div>
       </div>
 
-    <div className="px-6 bg-gray-900 mx-8 rounded-lg p-8 w-1/2">
-      <div className="bg-gray-900 rounded-lg shadow-md relative h-full">
-      <div>
-        <div className="flex justify-between items-center bg-gray-900 border-b-2 border-gray-700 pb-4">
-          <div className="flex space-x-4 ">
-          <button onClick={clickRun} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
-            >
-            Run
-          </button>
-        </div>
-        <div className="flex space-x-4 items-center  rounded-t-lg">
-          <select onChange={(e) => handleLanguageChange(e.target.value)}value={language}
-              className="p-1 text-white bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring focus:ring-blue-500"
-          >
-            <option value="cpp">C++</option>
-                <option value="c">C</option>
-                <option value="java">Java</option>
-                <option value="python">Python</option>
-            </select>
-
-            <select
-                onChange={(e) => handleThemeChange(e.target.value)}
-                value={theme}
+      <div className="px-6 bg-gray-900 mx-8 rounded-lg p-8 w-1/2">
+        <div className="bg-gray-900 rounded-lg shadow-md relative h-full">
+        <div>
+          <div className="flex justify-between items-center bg-gray-900 border-b-2 border-gray-700 pb-4">
+            <div className="flex space-x-4 ">
+            <button onClick={clickRun} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+              >
+              Run
+            </button>
+          </div>
+          <div className="flex space-x-4 items-center  rounded-t-lg">
+            <select onChange={(e) => handleLanguageChange(e.target.value)}value={language}
                 className="p-1 text-white bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring focus:ring-blue-500"
             >
-                <option value="vs-dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="hc-black">High Contrast</option>
-            </select>
+              <option value="cpp">C++</option>
+                  <option value="c">C</option>
+                  <option value="java">Java</option>
+                  <option value="python">Python</option>
+              </select>
+
+              <select
+                  onChange={(e) => handleThemeChange(e.target.value)}
+                  value={theme}
+                  className="p-1 text-white bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring focus:ring-blue-500"
+              >
+                  <option value="vs-dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="hc-black">High Contrast</option>
+              </select>
+          </div>
         </div>
+        <div className="p-5 bg-gray-800 rounded-lg shadow-lg my-4">
+          <Editor height="63vh" width="100%"
+              language={language}
+              value={code}
+              theme={theme}
+              onChange={(e) => setCode(e)}
+              options={{fontSize: 16,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        wordWrap: "on",
+                        }}
+              className="rounded-lg overflow-hidden border border-gray-700"/>
+          </div>
+          </div>
+          </div>
       </div>
-      <div className="p-5 bg-gray-800 rounded-lg shadow-lg my-4">
-        <Editor height="63vh" width="100%"
-            language={language}
-            value={code}
-            theme={theme}
-            onChange={(e) => setCode(e)}
-            options={{fontSize: 16,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      wordWrap: "on",
-                      }}
-            className="rounded-lg overflow-hidden border border-gray-700"/>
-        </div>
-        </div>
-        </div>
-    </div>
     
     <div className='w-1/4 flex flex-col h-full bg-gray-900 p-4 rounded-lg'>
       <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
@@ -243,7 +297,7 @@ function Room() {
         }
       </div>
       
-      {(connectionReady || !previlige) ? (
+      {(connectionReady) ? (
         <>
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-center items-center">
             <h3 className="text-lg font-semibold mb-4 text-white">Interviewee</h3>
@@ -251,8 +305,18 @@ function Room() {
               <p className="text-gray-400">Video</p>
             </div>
             <h3 className="text-lg font-semibold mb-4 text-white">You</h3>
+            <ReactPlayer muted={!isAudioOn} height="0%" width="0%"  url={mystream}/>
             <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white">
-              <ReactPlayer playing muted height="200px" width="200px" url={mystream}/>
+              {isVideoOn && 
+              <ReactPlayer 
+                playing={isVideoOn} 
+                muted={!isAudioOn}
+                height="100%" 
+                width="100%" 
+                url={mystream}
+                light={!isVideoOn}
+              />
+              }
             </div>
           </div>
         </>
