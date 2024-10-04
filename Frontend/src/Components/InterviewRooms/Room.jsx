@@ -10,67 +10,78 @@ import { useLocation } from 'react-router-dom';
 import ReactPlayer from 'react-player'
 
 function Room() {
+  const navigate=useNavigate();
   const defaultCodes = {
-      cpp: `#include<bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
-      c: `#include<stdio.h>\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
-      java: `public class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}`,
-      python: `def main():\n    # Your code here\n    pass\n\nif __name__ == "__main__":\n    main()`,
+    cpp: `#include<bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
+    c: `#include<stdio.h>\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
+    java: `public class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}`,
+    python: `def main():\n    # Your code here\n    pass\n\nif __name__ == "__main__":\n    main()`,
   };
+  const [code, setCode] = useState(defaultCodes.cpp);
   const [cases, setCases] = useState([
     { id: 1, input: '', output: '' },
     { id: 2, input: '', output: '' }
   ]);
-  const [language, setLanguage] = useState('cpp');
-  const [code, setCode] = useState(defaultCodes.cpp);
-  const [theme, setTheme] = useState('vs-dark');
+  
   const { roomId } = useParams();
-  const [isAudioOn, setAudioOn] = useState(false);
-  const [isVideoOn, setVideoOn] = useState(false);
-  const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
-  const [executing, setExecuting] = useState(false);
-  const navigate=useNavigate();
-  const [previlige,setprevilige]=useState(false);
+
   const [remoteSocketId,setremoteSocketId]=useState(null);
+
   const [requsername,setrequestusername]=useState(null);
   const [connectionReady,setconnectionReady]=useState(false);
   const [mystream,setMystream]=useState(null);
+
   const location = useLocation();
   const extraInfo = location.state;
-
+  const [previlige,setprevilige]=useState(false);
   useEffect(()=>{
       const nonparsedUser = localStorage.getItem('user');
       const user = JSON.parse(nonparsedUser); 
-      if(extraInfo && extraInfo._id===user._id)setprevilige(true);   
+      if(extraInfo && extraInfo._id===user._id)setprevilige(true);
+      else if(extraInfo)setremoteSocketId(extraInfo);
   })
 
   const socket=useSocket();
-  const handleUserjoined=({user,id})=>{
-    console.log(`user ${user.fullname} joined the room`);
-    setremoteSocketId(id);
-    setrequestusername(user.fullname);
+
+  const handleJoinRequest=({user,id,requser_id})=>{
+    console.log(`user ${user.fullname} Requested to join the room`);
+    setrequestusername({user,id,requser_id});
+  };
+
+  const acceptrequest=()=>{
+    console.log('accepted request');
+    setconnectionReady(true);
+    setremoteSocketId(requsername.id);
+    socket.emit('host:req_accepted',{ta:socket.id,user:requsername.user,room:roomId,id:requsername.id,requser_id:requsername.requser_id});
   }
 
   useEffect(()=>{
-    socket.on('user:joined',handleUserjoined);
+    socket.on('user:requested_to_join',handleJoinRequest);
     return ()=>{
-      socket.off('user:joined',handleUserjoined);
+      socket.off('user:requested_to_join',handleJoinRequest);
     }
-  },[socket,handleUserjoined]);
+  },[socket,handleJoinRequest]);
 
+
+  const [isAudioOn, setAudioOn] = useState(false);
   const toggleAudio = () => {
+    console.log(`Remote User is- ${remoteSocketId} and I am ${socket.id}`)
     setAudioOn(!isAudioOn);
   };
 
+  const [isVideoOn, setVideoOn] = useState(false);
   const toggleVideo = () => {
     setVideoOn(!isVideoOn);
   };
 
+  const [language, setLanguage] = useState('cpp');
   const handleLanguageChange = async (newLanguage) => {
       setLanguage(newLanguage);
       setCode(defaultCodes[newLanguage]);
       await updatedefaultlangService(newLanguage);
   };
 
+  const [theme, setTheme] = useState('vs-dark');
   const handleThemeChange = (newTheme) => {
       setTheme(newTheme);
   };
@@ -82,7 +93,9 @@ function Room() {
     setCases(newCases);
   };
 
-    const clickRun = async() => {
+  const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
+  const [executing, setExecuting] = useState(false);
+  const clickRun = async() => {
         setExampleCasesExecution(null);
         setExecuting(true);
         const response = await runExampleCasesService(language, code, cases);
@@ -90,9 +103,8 @@ function Room() {
             setExampleCasesExecution(response);
         }
         setExecuting(false);
-    };
-
-    const [copySuccess, setCopySuccess] = useState(false);
+  };
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(roomId)
@@ -231,7 +243,7 @@ function Room() {
         }
       </div>
       
-      {!connectionReady ? (
+      {(connectionReady || !previlige) ? (
         <>
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-center items-center">
             <h3 className="text-lg font-semibold mb-4 text-white">Interviewee</h3>
@@ -248,10 +260,10 @@ function Room() {
         <>
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
             <p className="text-lg font-semibold mb-2">Join Requests-</p>
-            {remoteSocketId && (
+            {requsername && (
               <div className="flex items-center gap-4">
-                <p className="text-gray-300">{requsername} has requested</p>
-                <button onClick={handleCallUser} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out">
+                <p className="text-gray-300">{requsername.user.fullname} has requested</p>
+                <button onClick={acceptrequest} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out">
                   Accept
                 </button>
               </div>

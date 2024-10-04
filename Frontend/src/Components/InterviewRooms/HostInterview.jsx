@@ -33,7 +33,7 @@ function HostInterview() {
         const nonparsedUser = localStorage.getItem('user');
         const user = JSON.parse(nonparsedUser);
         const randomRoomId = generateRoomId();
-        socket.emit('room:join', { room: randomRoomId, user});
+        socket.emit('create-room', { room: randomRoomId, user});
     };
 
     return (
@@ -43,7 +43,7 @@ function HostInterview() {
             </div>
             <div className="w-2/3 flex bg-gray-900 items-center justify-center space-y-8 mx-10 rounded-lg">
                 {isLoggedIn() ? (
-                    <div className='bg-gray-800 p-28 rounded-2xl'>
+                    <div className='bg-gray-800 p-16 rounded-2xl'>
                         <div className="flex flex-col gap-6 bg-gray-900 p-12 rounded-3xl shadow-lg max-w-md mx-auto">
                             <h2 className="text-4xl font-extrabold text-gray-100 mb-2 tracking-wide text-center">
                                 Create Room

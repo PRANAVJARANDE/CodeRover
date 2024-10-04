@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { isLoggedIn } from '../../Services/Auth.service.js'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSocket } from '../../Features/useSocket.js';
+import Executing from '../Editor/Executing.jsx';
 
 function JoinInterview() {
     const socket=useSocket();
@@ -10,10 +11,11 @@ function JoinInterview() {
     const [joining,setjoining]=useState(false);
 
     const handleJoinRoom = (data)=>{
-        const {user,room}=data;
+        const {ta,room,id,requser_id}=data;
         if(room==='')return;
         setjoining(false);
-        navigate(`/room/${room}`);
+        navigate(`/room/${room}`,{state:ta});
+        console.log('id isss-',ta);
     }
 
     useEffect(()=>{
@@ -28,17 +30,18 @@ function JoinInterview() {
         const nonparsedUser=localStorage.getItem('user');
         const user = JSON.parse(nonparsedUser); 
         setjoining(true); 
-        socket.emit("room:join",{room,user});
+        socket.emit('room:join_request',{room,user,id:socket.id});
     }
 
     return (
-        <div className="h-screen flex bg-gray-800 text-white p-10">
+        <div className="min-h-screen flex bg-gray-800 text-white p-10">
             <div className="w-1/3 flex items-center justify-center  rounded-lg  p-6 bg-gray-900">
                 <img src="/homelogo.png" alt="Logo" className="h-96 drop-shadow-lg rounded-full object-cover"/>
             </div>    
             <div className="w-2/3 flex  bg-gray-900 items-center justify-center space-y-8 mx-10 rounded-lg">
                 {isLoggedIn() ? (
-                <div className='bg-gray-800 p-28 rounded-2xl'>
+                    <>
+                <div className='bg-gray-800 p-16 rounded-2xl'>
                     <form className="flex flex-col gap-6 bg-gray-900 p-12 rounded-3xl shadow-lg max-w-md mx-auto">
                         <label htmlFor="roomId" className="text-3xl font-extrabold text-gray-100 mb-2 tracking-wide">
                             Enter Room ID
@@ -47,13 +50,20 @@ function JoinInterview() {
                             className="px-5 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 ease-in-out placeholder-gray-400"
                             placeholder="Enter Room ID"
                         />
+                        {joining ? <>
+                            <div>
+                                <Executing text={"Joining room"}/>
+                            </div>
+                        </>:
                         <button onClick={handleSubmit}
                             className="px-6 py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
                         >
                             Join Room
-                        </button>
-                        </form>
-                    </div>
+                        </button>}
+                    </form>
+                </div>
+                
+                </>    
                     ) : (<div className='p-40 bg-gray-800 rounded-lg'>
                         <div className=" flex items-center justify-center n bg-gray-800 rounded-lg">
                                 <div className="text-center bg-white p-8 rounded-lg shadow-lg">

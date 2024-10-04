@@ -12,18 +12,31 @@ export const createSocketServer = () => {
         }
     });
 
-    const useridToSocketIdMap = new Map();
-    const SocketIdTouseridMap = new Map();
-
     io.on('connection', (socket) => {
         console.log('User connected',socket.id);
-        socket.on('room:join',(data)=>{
+        socket.on('create-room',(data)=>{
             const {user,room}=data;
-            useridToSocketIdMap.set(user._id,socket.id);
-            SocketIdTouseridMap.set(socket.id,user._id);
-            io.to(room).emit('user:joined',{user,id:socket.id});
             socket.join(room);
             io.to(socket.id).emit("room:join",data);
+            console.log(`Host ${user.fullname} created room- ${room} and Joined`);
+        });
+
+        socket.on('room:join_request',(data)=>{
+            const {user,room,id}=data;
+            io.to(room).emit('user:requested_to_join',{user,id:socket.id,requser_id:id});
+            console.log(`Interviewer ${user.fullname} sent request to join ${room}`);
+        });
+
+        socket.on('host:req_accepted',(data)=>{
+            const {ta,user,room,id,requser_id}=data;
+            io.to(requser_id).emit('room:join',data);
+        })
+
+        socket.on('room:join',(data)=>{
+            const {user,room,id}=data;
+            socket.join(room);
+            io.to(socket.id).emit("room:join",data);
+            console.log('user joined the room');
         })
         socket.on('disconnect', () => {
             console.log('User disconnected');
