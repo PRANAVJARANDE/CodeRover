@@ -8,15 +8,11 @@ import Executing from '../Editor/Executing.jsx'
 import ExampleCasesOutput from '../Editor/ExampleCasesOutput.jsx';
 import { useLocation } from 'react-router-dom';
 import ReactPlayer from 'react-player'
+import { defaultCodes, enterFullScreen } from './helper.js';
+import { toast } from 'react-hot-toast';
 
 function Room() {
   const navigate=useNavigate();
-  const defaultCodes = {
-    cpp: `#include<bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
-    c: `#include<stdio.h>\n\nint main() {\n    // Your code here\n\n    return 0;\n}`,
-    java: `public class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}`,
-    python: `def main():\n    # Your code here\n    pass\n\nif __name__ == "__main__":\n    main()`,
-  };
   const [code, setCode] = useState(defaultCodes.cpp);
   const [cases, setCases] = useState([
     { id: 1, input: '', output: '' },
@@ -26,7 +22,6 @@ function Room() {
   const { roomId } = useParams();
 
   const [remoteSocketId,setremoteSocketId]=useState(null);
-
   const [requsername,setrequestusername]=useState(null);
   const [connectionReady,setconnectionReady]=useState(false);
   
@@ -40,31 +35,59 @@ function Room() {
       if(extraInfo && extraInfo._id===user._id)setprevilige(true);
       else if(extraInfo)
       {
+          enterFullScreen();
           setremoteSocketId(extraInfo);
           setconnectionReady(true);
       }
-  })
+  },[remoteSocketId]);
 
   const socket=useSocket();
 
   const handleJoinRequest=({user,id,requser_id})=>{
-    console.log(`user ${user.fullname} Requested to join the room`);
     setrequestusername({user,id,requser_id});
   };
 
   const acceptrequest=()=>{
-    console.log('accepted request');
     setconnectionReady(true);
     setremoteSocketId(requsername.id);
+    setrequestusername(null);
     socket.emit('host:req_accepted',{ta:socket.id,user:requsername.user,room:roomId,id:requsername.id,requser_id:requsername.requser_id});
+  }
+
+  const help1=()=>{
+    if (mystream) {
+      const tracks = mystream.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+      });
+    }
+    setMystream(null);
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch((err) => {
+        console.log(`Error attempting to exit full-screen mode: ${err.message}`);
+      });
+    }
+    toast.error('Host Ended call');
+    navigate('/join-interview');
+  };
+
+  const help2=({msg})=>{
+    toast.error(msg);
+    setconnectionReady(false);
+    setremoteSocketId(false);
+    setMystream(null);
   }
 
   useEffect(()=>{
     socket.on('user:requested_to_join',handleJoinRequest);
+    socket.on('host:hasleft',help1);
+    socket.on('interviewee:hasleft',help2);
     return ()=>{
       socket.off('user:requested_to_join',handleJoinRequest);
+      socket.off('host:hasleft',help1);
+      socket.off('interviewee:hasleft',help2);
     }
-  },[socket,handleJoinRequest]);
+  },[socket,handleJoinRequest,help1,help2]);
 
 
   const [mystream,setMystream]=useState(null);
@@ -156,14 +179,14 @@ function Room() {
       });
   };
 
-  
-  const exitroom=()=>{
+  const exitroom=({msg})=>{
     if (mystream) {
       const tracks = mystream.getTracks();
       tracks.forEach(track => {
         track.stop();
       });
     }
+    setMystream(null);
     if(previlige)
     {
       socket.emit('host:leave',{remoteSocketId,room:roomId});
@@ -171,12 +194,38 @@ function Room() {
     }
     else 
     {
-      socket.emit('interviewee:leave',{remoteSocketId,room:roomId});
+      if(!msg)msg="Interviewee left";
+      socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg});
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch((err) => {
+          console.log(`Error attempting to exit full-screen mode: ${err.message}`);
+        });
+      }
       navigate('/join-interview');
     }
-    setMystream(null);
+    
   }
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && !previlige) {
+        exitroom({msg:"Tried to exit Fullscreen"});
+        toast.error("Tried to exit Fullscreen");
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && !previlige) {
+          exitroom({ msg: "Tab switching found" });
+          toast.error("Tab switching found");
+      }
+  };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  });
 
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
@@ -285,57 +334,70 @@ function Room() {
           </div>
       </div>
     
-    <div className='w-1/4 flex flex-col h-full bg-gray-900 p-4 rounded-lg'>
-      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
-        <p className="text-3xl font-bold text-center">Room: {roomId}</p>
-        {copySuccess? <>
-          <p className="text-lg text-white text-center">Copied!</p>
-        </>:
-        <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
-          <img className='w-6' src='/copy.png'/>
-        </button>
-        }
-      </div>
-      
-      {(connectionReady) ? (
-        <>
-          <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-center items-center">
-            <h3 className="text-lg font-semibold mb-4 text-white">Interviewee</h3>
-            <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white">
-              <p className="text-gray-400">Video</p>
-            </div>
-            <h3 className="text-lg font-semibold mb-4 text-white">You</h3>
-            <ReactPlayer muted={!isAudioOn} height="0%" width="0%"  url={mystream}/>
-            <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white">
-              {isVideoOn && 
+      <div className='w-1/4 h-full bg-gray-900 p-6 rounded-lg'>
+  {connectionReady ? (
+    <>
+      <div className="bg-gray-800 h-full p-4 w-full rounded-lg shadow-md flex flex-col justify-evenly items-center space-y-6">
+    
+        <div className="w-full bg-gray-900 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold mb-3 text-white text-center">Interviewee</h3>
+          <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+            <p className="text-gray-400">Video</p>
+          </div>
+        </div>
+
+        <div className="w-full bg-gray-900 p-4 rounded-lg">
+          <h3 className="text-xl font-semibold mb-3 text-white text-center">You</h3>
+          <ReactPlayer muted={!isAudioOn} height="0%" width="0%" url={mystream}/>
+          <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+            {isVideoOn ? (
               <ReactPlayer 
                 playing={isVideoOn} 
                 muted={!isAudioOn}
                 height="100%" 
                 width="100%" 
                 url={mystream}
-                light={!isVideoOn}
+                className="rounded-lg"
               />
-              }
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
-            <p className="text-lg font-semibold mb-2">Join Requests-</p>
-            {requsername && (
-              <div className="flex items-center gap-4">
-                <p className="text-gray-300">{requsername.user.fullname} has requested</p>
-                <button onClick={acceptrequest} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out">
-                  Accept
-                </button>
-              </div>
+            ) : (
+              <p className="text-gray-400">Video Off</p>
             )}
           </div>
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    </>
+  ) : (
+    <>
+      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
+            <p className="text-3xl font-bold text-center">Room: {roomId}</p>
+            {copySuccess? <>
+              <p className="text-lg text-white text-center">Copied!</p>
+            </>:
+            <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
+              <img className='w-6' src='/copy.png'/>
+            </button>
+            }
+      </div>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+        <p className="text-lg font-semibold mb-4">Join Requests</p>
+        {requsername ? (
+          <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
+            <p className="text-gray-300">{requsername.user.fullname} has requested to join</p>
+            <button 
+              onClick={acceptrequest} 
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
+            >
+              Accept
+            </button>
+          </div>
+        ) : (
+          <p className="text-gray-400">No requests yet.</p>
+        )}
+      </div>
+    </>
+  )}
+</div>
+
 </div>
 
   );

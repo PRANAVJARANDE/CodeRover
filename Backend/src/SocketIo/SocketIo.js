@@ -30,7 +30,15 @@ export const createSocketServer = () => {
         socket.on('host:req_accepted',(data)=>{
             const {ta,user,room,id,requser_id}=data;
             io.to(requser_id).emit('room:join',data);
-        })
+        });
+        socket.on('host:leave',(data)=>{
+            const {room,remoteSocketId}=data;
+            io.to(remoteSocketId).emit('host:hasleft',data);
+        });
+        socket.on('interviewee:leave',(data)=>{
+            const {room,remoteSocketId,msg}=data;
+            io.to(remoteSocketId).emit('interviewee:hasleft',data);
+        });
 
         socket.on('room:join',(data)=>{
             const {user,room,id}=data;
