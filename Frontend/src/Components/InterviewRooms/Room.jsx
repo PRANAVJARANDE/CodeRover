@@ -20,7 +20,7 @@ function Room() {
   ]);
   
   const { roomId } = useParams();
-
+  const [remoteUser,setremoteUser]=useState(null);
   const [remoteSocketId,setremoteSocketId]=useState(null);
   const [requsername,setrequestusername]=useState(null);
   const [connectionReady,setconnectionReady]=useState(false);
@@ -72,7 +72,15 @@ function Room() {
   };
 
   const help2=({msg})=>{
+    if (mystream) {
+      const tracks = mystream.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+      });
+    }
+    setMystream(null);
     toast.error(msg);
+    toast.error("Interviewee left");
     setconnectionReady(false);
     setremoteSocketId(false);
     setMystream(null);
@@ -88,7 +96,6 @@ function Room() {
       socket.off('interviewee:hasleft',help2);
     }
   },[socket,handleJoinRequest,help1,help2]);
-
 
   const [mystream,setMystream]=useState(null);
   const [isAudioOn,setAudioOn]=useState(true);
@@ -135,7 +142,6 @@ function Room() {
     }
   };
   
-
   const [language, setLanguage] = useState('cpp');
   const handleLanguageChange = async (newLanguage) => {
       setLanguage(newLanguage);
@@ -381,11 +387,12 @@ function Room() {
       <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
         <p className="text-lg font-semibold mb-4">Join Requests</p>
         {requsername ? (
-          <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
-            <p className="text-gray-300">{requsername.user.fullname} has requested to join</p>
+          <div className="flex items-evenly items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
+            <img className='h-8 w-8' src={requsername.user.avatar}/>
+            <p className="text-gray-300">{requsername.user.fullname}</p>
             <button 
               onClick={acceptrequest} 
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
+              className="px-2 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
             >
               Accept
             </button>
