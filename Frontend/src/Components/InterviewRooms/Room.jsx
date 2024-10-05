@@ -22,10 +22,11 @@ function Room() {
   const { roomId } = useParams();
   const [remoteUser,setremoteUser]=useState(null);
   const [remoteSocketId,setremoteSocketId]=useState(null);
-  const [requsername,setrequestusername]=useState(null);
+  const [requsername,setrequestusername]=useState([]);
   const [connectionReady,setconnectionReady]=useState(false);
   
-
+  
+  const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
   const location = useLocation();
   const extraInfo = location.state;
   const [previlige,setprevilige]=useState(false);
@@ -44,14 +45,17 @@ function Room() {
   const socket=useSocket();
 
   const handleJoinRequest=({user,id,requser_id})=>{
-    setrequestusername({user,id,requser_id});
+    setrequestusername((prev) => {
+      return [...prev, { user, id, requser_id }];
+    });
   };
 
-  const acceptrequest=()=>{
+  const acceptrequest=(index)=>{
     setconnectionReady(true);
-    setremoteSocketId(requsername.id);
-    setrequestusername(null);
-    socket.emit('host:req_accepted',{ta:socket.id,user:requsername.user,room:roomId,id:requsername.id,requser_id:requsername.requser_id});
+    setremoteUser(requsername[index].user);
+    setremoteSocketId(requsername[index].id);
+    setrequestusername([]);
+    socket.emit('host:req_accepted',{ta:socket.id,user:requsername[index].user,room:roomId,id:requsername[index].id,requser_id:requsername[index].requser_id});
   }
 
   const help1=()=>{
@@ -86,16 +90,41 @@ function Room() {
     setMystream(null);
   }
 
+  const help3=({code})=>{
+    setCode(code);
+  }
+
+  const help4=({language})=>{
+    setLanguage(language);
+    setCode(defaultCodes[language]);
+  }
+
+  const help5=({cases})=>{
+    setCases(cases);
+  }
+
+  const help6=({exampleCasesExecution})=>{
+    setExampleCasesExecution(exampleCasesExecution);
+  }
+
   useEffect(()=>{
     socket.on('user:requested_to_join',handleJoinRequest);
     socket.on('host:hasleft',help1);
     socket.on('interviewee:hasleft',help2);
+    socket.on('change:code',help3);
+    socket.on('change:language',help4);
+    socket.on('change:cases',help5);
+    socket.on('run:code',help6);
     return ()=>{
       socket.off('user:requested_to_join',handleJoinRequest);
       socket.off('host:hasleft',help1);
       socket.off('interviewee:hasleft',help2);
+      socket.off('change:code',help3);
+      socket.off('change:language',help4);
+      socket.off('change:cases',help5);
+      socket.on('run:code',help6);
     }
-  },[socket,handleJoinRequest,help1,help2]);
+  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6]);
 
   const [mystream,setMystream]=useState(null);
   const [isAudioOn,setAudioOn]=useState(true);
@@ -146,7 +175,7 @@ function Room() {
   const handleLanguageChange = async (newLanguage) => {
       setLanguage(newLanguage);
       setCode(defaultCodes[newLanguage]);
-      await updatedefaultlangService(newLanguage);
+      socket.emit('language:change',{remoteSocketId,language:newLanguage});
   };
 
   const [theme, setTheme] = useState('vs-dark');
@@ -159,9 +188,9 @@ function Room() {
     const newCases = [...cases];
     newCases[index][field] = value;
     setCases(newCases);
+    socket.emit('cases:change',{remoteSocketId,cases:newCases});
   };
 
-  const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
   const [executing, setExecuting] = useState(false);
   const clickRun = async() => {
         setExampleCasesExecution(null);
@@ -170,10 +199,13 @@ function Room() {
         if (response) {
             setExampleCasesExecution(response);
         }
+        if(!previlige)
+        {
+          socket.emit('code:run',{remoteSocketId,exampleCasesExecution:response});
+        }
         setExecuting(false);
   };
   const [copySuccess, setCopySuccess] = useState(false);
-
   const handleCopy = () => {
     navigator.clipboard.writeText(roomId)
       .then(() => {
@@ -209,7 +241,6 @@ function Room() {
       }
       navigate('/join-interview');
     }
-    
   }
 
   useEffect(() => {
@@ -220,11 +251,11 @@ function Room() {
       }
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && !previlige) {
-          exitroom({ msg: "Tab switching found" });
-          toast.error("Tab switching found");
-      }
-  };
+        if (document.visibilityState === 'hidden' && !previlige) {
+            exitroom({ msg: "Tab switching found" });
+            toast.error("Tab switching found");
+        }
+    };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
@@ -232,6 +263,11 @@ function Room() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   });
+
+  const changecode=(e)=>{
+    setCode(e);
+    socket.emit('code:change',{remoteSocketId,code:e});
+  }
 
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
@@ -258,6 +294,9 @@ function Room() {
                 <div className='bg-gray-700 rounded-lg p-2'>
                   <ExampleCasesOutput exampleCasesExecution={exampleCasesExecution}/>
                 </div>
+                <button className='px-2 py-1 rounded-lg bg-blue-600 text-white' onClick={()=>{
+                  setExampleCasesExecution(null);
+                }}>Reset Testcases</button>
               </>: 
               <>{cases.map((exampleCase, index) => (
             <div key={exampleCase.id} className="bg-gray-700 p-4 rounded-lg shadow-md space-y-2">
@@ -285,7 +324,7 @@ function Room() {
           </>
           }
           <div className="bg-gray-800 p-2 rounded-lg shadow-lg">
-            <Timer previlige={previlige} />
+            <Timer previlige={previlige} remoteSocketId={remoteSocketId}/>
           </div>
         </div>
       </div>
@@ -327,7 +366,7 @@ function Room() {
               language={language}
               value={code}
               theme={theme}
-              onChange={(e) => setCode(e)}
+              onChange={(e) => {changecode(e)}}
               options={{fontSize: 16,
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
@@ -346,7 +385,7 @@ function Room() {
       <div className="bg-gray-800 h-full p-4 w-full rounded-lg shadow-md flex flex-col justify-evenly items-center space-y-6">
     
         <div className="w-full bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-xl font-semibold mb-3 text-white text-center">Interviewee</h3>
+          <h3 className="text-xl font-semibold mb-3 text-white text-center">{remoteUser? remoteUser.fullname : 'Interviewer'}</h3>
           <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
             <p className="text-gray-400">Video</p>
           </div>
@@ -386,17 +425,21 @@ function Room() {
       </div>
       <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
         <p className="text-lg font-semibold mb-4">Join Requests</p>
-        {requsername ? (
-          <div className="flex items-evenly items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
-            <img className='h-8 w-8' src={requsername.user.avatar}/>
-            <p className="text-gray-300">{requsername.user.fullname}</p>
-            <button 
-              onClick={acceptrequest} 
-              className="px-2 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
-            >
-              Accept
-            </button>
-          </div>
+        {requsername.length ? (
+          <>
+          {requsername.map((x,index)=>(
+            <div key={index} className="flex items-evenly items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
+              <img className='h-10 w-10 rounded-full border-gray-50 border-2' src={x.user.avatar}/>
+              <p className="text-gray-300">{x.user.fullname}</p>
+              <button 
+                onClick={()=>{acceptrequest(index)}} 
+                className="px-2 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
+              >
+                Accept
+              </button>
+            </div>
+          ))}
+          </>
         ) : (
           <p className="text-gray-400">No requests yet.</p>
         )}
@@ -405,7 +448,7 @@ function Room() {
   )}
 </div>
 
-</div>
+    </div>
 
   );
 }

@@ -39,13 +39,32 @@ export const createSocketServer = () => {
             const {room,remoteSocketId,msg}=data;
             io.to(remoteSocketId).emit('interviewee:hasleft',data);
         });
-
+        socket.on('code:change',(data)=>{
+            const {remoteSocketId,code}=data;
+            io.to(remoteSocketId).emit('change:code',data);
+        });
+        socket.on('language:change',(data)=>{
+            const {remoteSocketId,language}=data;
+            io.to(remoteSocketId).emit('change:language',data);
+        });
+        socket.on('cases:change',(data)=>{
+            const {remoteSocketId,cases}=data;
+            io.to(remoteSocketId).emit('change:cases',data);
+        });
+        socket.on('code:run',(data)=>{
+            const {remoteSocketId}=data;
+            io.to(remoteSocketId).emit('run:code',data);
+        });
         socket.on('room:join',(data)=>{
             const {user,room,id}=data;
             socket.join(room);
             io.to(socket.id).emit("room:join",data);
             console.log('user joined the room');
-        })
+        });
+        socket.on('time:change',(data)=>{
+            const {remoteSocketId}=data;
+            io.to(remoteSocketId).emit('change:time',data);
+        });
         socket.on('disconnect', () => {
             console.log('User disconnected');
         });

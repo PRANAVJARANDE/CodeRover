@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { useSocket } from '../../Features/useSocket';
 
-const Timer = ({previlige}) => {
+const Timer = ({previlige,remoteSocketId}) => {
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [inputTime, setInputTime] = useState(''); 
+  const socket=useSocket();
+
+  const help1=({tm})=>{
+    setTime(tm);
+  }
+
+  useEffect(()=>{
+    socket.on('change:time',help1);
+    return ()=>{
+      socket.off('change:time',help1);
+    }
+  },[socket]);
 
   useEffect(() => {
     let timer;
@@ -18,9 +31,15 @@ const Timer = ({previlige}) => {
         });
       }, 1000);
     }
-
     return () => clearInterval(timer);
   }, [isRunning]);
+
+  useEffect(()=>{
+    if(previlige)
+    {
+      socket.emit('time:change',{remoteSocketId,tm:time});
+    }
+  },[time]);
 
   const handleStart = () => {
     if (inputTime > 0) {
