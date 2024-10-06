@@ -10,6 +10,7 @@ import { useLocation } from 'react-router-dom';
 import ReactPlayer from 'react-player'
 import { defaultCodes, enterFullScreen } from './helper.js';
 import { toast } from 'react-hot-toast';
+import peer from '../../Services/peer.js';
 
 function Room() {
   const navigate=useNavigate();
@@ -106,6 +107,59 @@ function Room() {
   const help6=({exampleCasesExecution})=>{
     setExampleCasesExecution(exampleCasesExecution);
   }
+  const [remoteStream,setRemoteStream]=useState(null);
+  useEffect(()=>{
+    peer.peer.addEventListener('track',async (ev) =>{
+      const stream=ev.streams;
+      console.log("Got tracks")
+      setRemoteStream(stream[0]);
+    })
+  },[])
+
+  const handleNegotiation=async()=>{
+    const offer=await peer.createOffer();
+    socket.emit('peer:nego:needed',{offer,to:remoteSocketId});
+  }
+
+  useEffect(()=>{
+    peer.peer.addEventListener('negotiationneeded',handleNegotiation);
+    return ()=>{
+      peer.peer.removeEventListener('negotiationneeded',handleNegotiation);
+    }
+  },[handleNegotiation])
+
+  const handleIncommingCall=async({from,offer})=>{
+    const answer=await peer.handleOffer(offer);
+    if(!remoteSocketId)
+    {
+      setremoteSocketId(from);
+    }
+    if(!mystream)
+    {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      setMystream(stream);
+    }
+    socket.emit('call:accepted',{to:from,answer});
+  }
+
+  const handleCallAccepted=async({from,answer})=>{
+    peer.setLocalDescription(answer);
+    if (mystream) {
+      const tracks = mystream.getTracks();
+      tracks.forEach(track => {
+        peer.peer.addTrack(track,mystream);
+      });
+    }
+  }
+
+  const handleNegotiationIncomming=async({from,offer})=>{
+    const ans=await peer.handleOffer(offer);
+    socket.emit('peer:nego:done',{to:from,ans}); 
+  }
+  
+  const handleFinalNego=async({ans})=>{
+    await peer.setLocalDescription(ans)
+  }
 
   useEffect(()=>{
     socket.on('user:requested_to_join',handleJoinRequest);
@@ -115,6 +169,10 @@ function Room() {
     socket.on('change:language',help4);
     socket.on('change:cases',help5);
     socket.on('run:code',help6);
+    socket.on('incomming:call',handleIncommingCall);
+    socket.on('call:accepted',handleCallAccepted);
+    socket.on('peer:nego:needed',handleNegotiationIncomming);
+    socket.on('peer:nego:final',handleFinalNego);
     return ()=>{
       socket.off('user:requested_to_join',handleJoinRequest);
       socket.off('host:hasleft',help1);
@@ -122,9 +180,13 @@ function Room() {
       socket.off('change:code',help3);
       socket.off('change:language',help4);
       socket.off('change:cases',help5);
-      socket.on('run:code',help6);
+      socket.off('run:code',help6);
+      socket.off('incomming:call',handleIncommingCall);
+      socket.off('call:accepted',handleCallAccepted);
+      socket.off('peer:nego:needed',handleNegotiationIncomming);
+      socket.off('peer:nego:final',handleFinalNego);
     }
-  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6]);
+  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
 
   const [mystream,setMystream]=useState(null);
   const [isAudioOn,setAudioOn]=useState(true);
@@ -135,6 +197,17 @@ function Room() {
       if (connectionReady) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+          if (mystream) {
+            const tracks = mystream.getTracks();
+            tracks.forEach(track => {
+              peer.peer.addTrack(track,mystream);
+            });
+          }
+          if(previlige)
+          {
+            const offer=await peer.createOffer();
+            socket.emit("user:call",{remoteSocketId,offer});
+          }
           setMystream(stream);
           setAudioOn(stream.getAudioTracks()[0]?.enabled || false);
           setVideoOn(stream.getVideoTracks()[0]?.enabled || false);
@@ -387,7 +460,21 @@ function Room() {
         <div className="w-full bg-gray-900 p-4 rounded-lg">
           <h3 className="text-xl font-semibold mb-3 text-white text-center">{remoteUser? remoteUser.fullname : 'Interviewer'}</h3>
           <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
-            <p className="text-gray-400">Video</p>
+            {remoteStream ? (
+              <video
+                ref={videoRef => {
+                  if (videoRef && remoteStream) {
+                    videoRef.srcObject = remoteStream;
+                    videoRef.muted = false;
+                  }
+                }}
+                autoPlay
+                playsInline
+                className="rounded-lg h-full w-full"
+              />
+              ) : (
+                <p className="text-gray-400">Video Off</p>
+              )}
           </div>
         </div>
 

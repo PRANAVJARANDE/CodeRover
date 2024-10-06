@@ -65,9 +65,23 @@ export const createSocketServer = () => {
             const {remoteSocketId}=data;
             io.to(remoteSocketId).emit('change:time',data);
         });
+        socket.on('user:call',(data)=>{
+            const {remoteSocketId,offer}=data;
+            io.to(remoteSocketId).emit('incomming:call',{from:socket.id,offer});
+        });
+        socket.on('call:accepted',({to,answer})=>{
+            io.to(to).emit('call:accepted',{from:socket.id,answer});
+        });
+        socket.on('peer:nego:needed',({to,offer})=>{
+            io.to(to).emit('peer:nego:needed',{from:socket.id,offer});
+        });
+        socket.on('peer:nego:done',({to,ans})=>{
+            io.to(to).emit('peer:nego:final',{from:socket.id,ans});
+        });
         socket.on('disconnect', () => {
             console.log('User disconnected');
         });
+        
         socket.emit('welcome', 'Welcome to the server!');
     });
 
