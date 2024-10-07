@@ -6,15 +6,22 @@ import ProblemStats from './ProblemStats.jsx';
 import UserDetails from './UserDetails.jsx';
 import UserTweets from './UserTweets.jsx';
 import Submissions from '../Submission/Submissions.jsx';
-
+import { useNavigate } from 'react-router-dom';
 const Profile = () => {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('submissions'); 
-
+  const navigate=useNavigate();
   useEffect(() => {
     const fetchUserProfile = async () => {
       const response = await getMyProfile(); 
       setUser(response);
+      if(!response)
+      {
+        navigate('/login');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+      }
     };
     fetchUserProfile();
   }, []);

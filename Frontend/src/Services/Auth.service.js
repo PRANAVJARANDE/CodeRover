@@ -85,6 +85,7 @@ export const getMyProfile = async () => {
   {
     toast.error('Failed to Load Profile');
     console.log(error);
+    return null;
   }
 };
 
@@ -142,3 +143,35 @@ export const updateUserAvatar = async (formData) => {
     return false;
   }
 };
+
+export const refreshTokenService = async () => {
+  try {
+    const token=localStorage.getItem('refreshToken');
+    if(!token)return;
+    
+    const response=await fetch(`${backendURL}/users/refresh-token`,{
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({refreshToken:token})
+    });
+
+    const data = await response.json();
+    if (response.status === 200) {
+      localStorage.setItem('accessToken', data.data.accessToken);
+      localStorage.setItem('refreshToken', data.data.refreshToken);
+      return true;
+    } 
+    else 
+    {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    }
+  } catch (error) {
+    console.log(error);
+    return false;
+  }
+};
+
