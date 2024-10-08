@@ -16,7 +16,7 @@ const Discuss = () => {
         helper();
     }, [replyToTweetId, hasNewReply]); 
 
-    if(tweets === null) return (<Loading/>);
+    if (tweets === null) return (<Loading/>);
     return (
         <div className="min-h-screen bg-gray-800 text-white p-10">
             <div className="bg-gray-900 p-8 mb-6 rounded-xl shadow-lg">
@@ -31,10 +31,10 @@ const Discuss = () => {
                             <div key={index} className="bg-gray-700 p-6 rounded-lg shadow-md">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex flex-row items-center">
-                                        {tweet.owner.avatar && (
+                                        {tweet?.owner?.avatar && (
                                             <img src={tweet.owner.avatar} alt="User Avatar" className="w-10 h-10 rounded-full mr-4 mb-2" />
                                         )}
-                                        <span className="text-white font-semibold">{tweet.owner.username}</span>
+                                        <span className="text-white font-semibold">{tweet.owner?.username || 'Unknown User'}</span>
                                     </div>
                                     <span className="text-gray-400 text-lg">
                                         {new Date(tweet.createdAt).toLocaleDateString()}
@@ -50,10 +50,10 @@ const Discuss = () => {
                                             <div key={replyIndex} className="bg-gray-600 p-4 rounded-lg shadow-md mb-3">
                                                 <div className='flex flex-row-reverse'>
                                                     <div className="flex items-center mb-2">
-                                                        {reply.owner.avatar && (
+                                                        {reply?.owner?.avatar && (
                                                             <img src={reply.owner.avatar} alt="Reply Owner Avatar" className="w-8 h-8 rounded-full mr-3" />
                                                         )}
-                                                        <span className="text-white font-semibold">{reply.owner.username}</span>
+                                                        <span className="text-white font-semibold">{reply.owner?.username || 'Unknown User'}</span>
                                                     </div>
                                                 </div>
                                                 <p className="text-white mb-2">{reply.content}</p>
@@ -65,7 +65,9 @@ const Discuss = () => {
                                     </div>
                                 )}
 
-                                {replyToTweetId === tweet._id && (<Reply replyOf={replyToTweetId} onReplySuccess={() => setHasNewReply(!hasNewReply)} />)}
+                                {replyToTweetId === tweet._id && (
+                                    <Reply replyOf={replyToTweetId} onReplySuccess={() => setHasNewReply(!hasNewReply)} />
+                                )}
 
                                 <div className='flex flex-row-reverse'>
                                     <button onClick={() => setReplyToTweetId(replyToTweetId === tweet._id ? null : tweet._id)}

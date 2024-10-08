@@ -203,11 +203,8 @@ function Room() {
               peer.peer.addTrack(track,mystream);
             });
           }
-          if(previlige)
-          {
-            const offer=await peer.createOffer();
-            socket.emit("user:call",{remoteSocketId,offer});
-          }
+          const offer=await peer.createOffer();
+          socket.emit("user:call",{remoteSocketId,offer});
           setMystream(stream);
           setAudioOn(stream.getAudioTracks()[0]?.enabled || false);
           setVideoOn(stream.getVideoTracks()[0]?.enabled || false);
