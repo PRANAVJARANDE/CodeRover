@@ -16,7 +16,8 @@ Built on the MERN stack (MongoDB, Express, React, Node.js), Coderover offers sec
 - **MongoDB**: Database for storing user data and problem sets
 - **React.js**: Frontend with a modern and responsive user interface
 - **Redux**: State management 
-
+- **Tailwind**: Designing
+- 
 ## Features
 
 - **Code Sanitization**: Each code execution request is sanitized to prevent harmful operations
