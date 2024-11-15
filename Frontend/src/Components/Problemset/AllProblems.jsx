@@ -24,7 +24,6 @@ const AllProblems = () => {
             if(response2)setSolvedProblems(response2);
         }
         helper();
-        refreshTokenService();
     },[]);
 
     if(!problems)return <Loading/>

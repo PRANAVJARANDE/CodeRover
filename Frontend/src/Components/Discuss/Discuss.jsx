@@ -17,10 +17,6 @@ const Discuss = () => {
         helper();
     }, [replyToTweetId, hasNewReply]);  
 
-    useEffect(()=>{
-        refreshTokenService();
-    },[])
-
     if (tweets === null) return (<Loading/>);
     return (
         <div className="min-h-screen bg-gray-800 text-white p-10">

@@ -170,6 +170,7 @@ export const refreshTokenService = async () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      return false;
     }
   } catch (error) {
     console.log(error);

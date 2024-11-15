@@ -24,7 +24,6 @@ const Profile = () => {
       }
     };
     fetchUserProfile();
-    refreshTokenService();
   }, []);
 
   if (!user) return <Loading/>;

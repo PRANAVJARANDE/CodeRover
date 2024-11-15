@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import {Link} from 'react-router-dom'
 import Loading from '../Loading/Loading.jsx';
-import { refreshTokenService } from '../../Services/Auth.service.js';
 
 function Home() {
     
     const [isLoading, setIsLoading] = useState(true);
     useEffect(() => {
-        refreshTokenService()
         const timer = setTimeout(() => setIsLoading(false), 500);
         return () => clearTimeout(timer); 
     }, []);
