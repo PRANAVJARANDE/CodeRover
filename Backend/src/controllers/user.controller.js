@@ -11,10 +11,10 @@ const generateAccessAndRefreshTokens = async(userId)=>{
         const accessToken=user.generateAccessToken();
         const refreshToken=user.generateRefreshToken();
         user.refreshToken=refreshToken;
-        await user.save({validateBeforeSave:false});     
+        await user.save({validateBeforeSave:false});
         return {accessToken,refreshToken};
     } catch (error) {
-        throw new ApiError(500,"Something went Wrong");
+        throw new ApiError(500,"Something went Wrong in generating tokens");
     }
 };
 
@@ -33,15 +33,15 @@ const registerUser= asyncHandler( async (req,res)=>{
 const loginUser= asyncHandler(async(req,res)=>{
     const {email,password}=req.body;
     const user=await User.findOne({email});
+    //vaildation
     if(!user)return res.status(400).json(new ApiResponse(400,null,"Invalid Email"));
-    
     const isPasswordValid=await user.isPasswordCorrect(password);
     if(!isPasswordValid)res.status(400).json(new ApiResponse(400,null,"Invalid password"));
     
+    //token generation
     const {accessToken,refreshToken}=await generateAccessAndRefreshTokens(user._id);
-
     const loggedInUser=await User.findById(user._id).select("-password -refreshToken");
-
+    
     const options={
         httpOnly:true,          
         secure:true ,            
@@ -80,10 +80,9 @@ const logoutUser= asyncHandler(async(req,res)=>{
 });
 
 const refreshAccessToken=asyncHandler(async(req,res)=>{
-    const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken;
-    if(!incomingRefreshToken)return;
-    
     try {
+        const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken;
+        if(!incomingRefreshToken)return;
         const decodedToken=jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET);
         const user=await User.findById(decodedToken?._id);
         if(!user)
@@ -94,16 +93,14 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
         {   
             return;
         }
-    
-        const {accessToken,newrefreshToken}=await generateAccessAndRefreshTokens(user._id);
+        const {accessToken,refreshToken}=await generateAccessAndRefreshTokens(user._id);
         const options={
             httpOnly:true,          
             secure:true ,         
             sameSite: 'Strict'
         }
-    
-        return res.status(200).cookie("accessToken",accessToken,options).cookie("refreshToken",newrefreshToken,options)
-        .json(new ApiResponse(200,{accessToken,refreshToken:newrefreshToken},"ACCESS TOKEN REFRESHED SUCCESSFULLY"))
+        return res.status(200).cookie("accessToken",accessToken,options).cookie("refreshToken",refreshToken,options)
+        .json(new ApiResponse(200,{accessToken,refreshToken},"ACCESS TOKEN REFRESHED SUCCESSFULLY"))
     } catch (error) {
         return res.status(404).json(new ApiResponse(401,{},"plz logout"));
     }

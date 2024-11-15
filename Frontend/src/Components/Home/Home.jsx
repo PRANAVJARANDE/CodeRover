@@ -7,6 +7,7 @@ function Home() {
     
     const [isLoading, setIsLoading] = useState(true);
     useEffect(() => {
+        refreshTokenService()
         const timer = setTimeout(() => setIsLoading(false), 500);
         return () => clearTimeout(timer); 
     }, []);

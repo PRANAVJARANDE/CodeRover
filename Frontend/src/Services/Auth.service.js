@@ -11,9 +11,10 @@ export const loginUser = async (userData) => {
 
     const data = await response.json();
     if (response?.status === 200) {
-      localStorage.setItem('accessToken', data.data.accessToken);
-      localStorage.setItem('refreshToken', data.data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
+      const {accessToken,refreshToken,user}=data.data;
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
       toast.success("Logged in");
       return true;
     } 
@@ -159,8 +160,11 @@ export const refreshTokenService = async () => {
 
     const data = await response.json();
     if (response.status === 200) {
-      localStorage.setItem('accessToken', data.data.accessToken);
-      localStorage.setItem('refreshToken', data.data.refreshToken);
+      const {refreshToken,accessToken}=data.data;
+      console.log("New RT-",refreshToken);
+      console.log("New AT-",accessToken);
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
       return true;
     } 
     else 
