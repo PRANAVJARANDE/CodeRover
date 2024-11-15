@@ -82,16 +82,12 @@ const logoutUser= asyncHandler(async(req,res)=>{
 const refreshAccessToken=asyncHandler(async(req,res)=>{
     try {
         const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken;
-        if(!incomingRefreshToken)return;
+        if(!incomingRefreshToken)return res.status(400).json(new ApiResponse(400, null, "Refresh token is missing"));
         const decodedToken=jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET);
         const user=await User.findById(decodedToken?._id);
-        if(!user)
-        {
-            return;
-        }
-        if(incomingRefreshToken!==user?.refreshToken)
+        if(!user || incomingRefreshToken!==user?.refreshToken)
         {   
-            return;
+            return res.status(401).json(new ApiResponse(401, null, "Invalid or expired refresh token"));
         }
         const {accessToken,refreshToken}=await generateAccessAndRefreshTokens(user._id);
         const options={
@@ -99,7 +95,9 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
             secure:true ,         
             sameSite: 'Strict'
         }
-        return res.status(200).cookie("accessToken",accessToken,options).cookie("refreshToken",refreshToken,options)
+        return res.status(200)
+        .cookie("accessToken",accessToken,options)
+        .cookie("refreshToken",refreshToken,options)
         .json(new ApiResponse(200,{accessToken,refreshToken},"ACCESS TOKEN REFRESHED SUCCESSFULLY"))
     } catch (error) {
         return res.status(404).json(new ApiResponse(401,{},"plz logout"));
