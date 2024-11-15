@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
-const Header = ({ user }) => {
+const Header = () => {
+  const [user,setuser]=useState(null);
+  useEffect(()=>{
+    const localuser=localStorage.getItem('user');
+    if(localuser)setuser(JSON.parse(localuser));
+  },[])
+
   return (
     <header className="bg-gray-900 text-white shadow-lg pb-1">
       <div className="container mx-auto flex items-center justify-between py-4 px-6">

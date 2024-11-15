@@ -6,16 +6,9 @@ import axios from 'axios'
 axios.defaults.withCredentials=true
 
 function App() {
-
-  const [user,setuser]=useState(null);
-  useEffect(()=>{
-    const localuser=localStorage.getItem('user');
-    if(localuser)setuser(JSON.parse(localuser));
-  },[])
-
   return (
     <>
-      <Header user={user}/>
+      <Header/>
       <Outlet/>
     </>
   )

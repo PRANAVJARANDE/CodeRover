@@ -78,14 +78,12 @@ export const getMyProfile = async () => {
     } 
     else 
     {
-      toast.error(data.message);  
       return null;
     }
   } 
   catch (error) 
   {
     toast.error('Failed to Load Profile');
-    console.log(error);
     return null;
   }
 };
