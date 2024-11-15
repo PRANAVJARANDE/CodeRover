@@ -2,20 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { isLoggedIn } from '../../Services/Auth.service.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSocket } from '../../Features/useSocket.js';
-
-const generateRoomId = () => {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let roomId = '';
-    for (let i = 0; i < 5; i++) {
-        roomId += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return roomId;
-};
+import { generateRoomId } from './helper.js';
 
 function HostInterview() {
     const socket = useSocket();
     const navigate = useNavigate();
-
 
     const handleJoinRoom = (data) => {
         const {user,room} = data;

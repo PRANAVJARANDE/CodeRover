@@ -52,6 +52,12 @@ function Room() {
   };
 
   const acceptrequest=(index)=>{
+    const setmystreamfunc = async()=>{
+      const offer=await peer.getOffer();
+      socket.emit("user:call",{remoteSocketId,offer});
+    }
+    setmystreamfunc();
+    
     setconnectionReady(true);
     setremoteUser(requsername[index].user);
     setremoteSocketId(requsername[index].id);
@@ -109,15 +115,15 @@ function Room() {
   }
   const [remoteStream,setRemoteStream]=useState(null);
   useEffect(()=>{
-    peer.peer.addEventListener('track',async (ev) =>{
-      const stream=ev.streams;
-      console.log("Got tracks")
-      setRemoteStream(stream[0]);
+    peer.peer.addEventListener('track',async ev =>{
+      const rstream=ev.streams;
+      console.log("GOT TRACKS");
+      setRemoteStream(rstream[0]);
     })
   },[])
 
   const handleNegotiation=async()=>{
-    const offer=await peer.createOffer();
+    const offer=await peer.getOffer();
     socket.emit('peer:nego:needed',{offer,to:remoteSocketId});
   }
 
@@ -128,32 +134,42 @@ function Room() {
     }
   },[handleNegotiation])
 
-  const handleIncommingCall=async({from,offer})=>{
-    const answer=await peer.handleOffer(offer);
-    if(!remoteSocketId)
-    {
-      setremoteSocketId(from);
-    }
-    if(!mystream)
-    {
+
+  useEffect(()=>{
+    const sthel=async()=>{
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       setMystream(stream);
     }
+    sthel();
+  },[])
+
+  const handleIncommingCall=async({from,offer})=>{
+    const answer=await peer.getAnswer(offer);
+    setremoteSocketId(from);
     socket.emit('call:accepted',{to:from,answer});
   }
 
-  const handleCallAccepted=async({from,answer})=>{
-    peer.setLocalDescription(answer);
-    if (mystream) {
+  const sendstreams=()=>{
+    console.log("MS-",mystream);
+    console.log("RS-",remoteStream);
+
+    if(mystream)
+    {
       const tracks = mystream.getTracks();
       tracks.forEach(track => {
         peer.peer.addTrack(track,mystream);
       });
     }
+    
+  }
+
+  const handleCallAccepted=async({from,answer})=>{
+    peer.setLocalDescription(answer);
+    sendstreams();
   }
 
   const handleNegotiationIncomming=async({from,offer})=>{
-    const ans=await peer.handleOffer(offer);
+    const ans=await peer.getAnswer(offer);
     socket.emit('peer:nego:done',{to:from,ans}); 
   }
   
@@ -192,35 +208,6 @@ function Room() {
   const [isAudioOn,setAudioOn]=useState(true);
   const [isVideoOn,setVideoOn]=useState(true);
 
-  useEffect(() => {
-    const getMediaStream = async () => {
-      if (connectionReady) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-          if (mystream) {
-            const tracks = mystream.getTracks();
-            tracks.forEach(track => {
-              peer.peer.addTrack(track,mystream);
-            });
-          }
-          const offer=await peer.createOffer();
-          socket.emit("user:call",{remoteSocketId,offer});
-          setMystream(stream);
-          setAudioOn(stream.getAudioTracks()[0]?.enabled || false);
-          setVideoOn(stream.getVideoTracks()[0]?.enabled || false);
-        } catch (error) {
-          console.error('Error accessing media devices:', error);
-        }
-      }
-    };
-    getMediaStream();
-    return () => {
-      if (mystream) {
-        mystream.getTracks().forEach(track => track.stop());
-      }
-    };
-  },[connectionReady]);
-
   const toggleAudio = () => {
     if (mystream) {
       const audioTrack = mystream.getAudioTracks()[0];
@@ -232,6 +219,8 @@ function Room() {
   };
   
   const toggleVideo = () => {
+    console.log("MS-",mystream);
+    console.log("RS-",remoteStream);
     if (mystream) {
       const videoTrack = mystream.getVideoTracks()[0];
       if (videoTrack) {
@@ -493,6 +482,13 @@ function Room() {
             )}
           </div>
         </div>
+        <button 
+          onClick={sendstreams} 
+          className="px-6 py-2 bg-blue-600 text-white font-medium text-sm rounded-lg shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 transition-transform transform hover:scale-105 active:scale-95"
+        >
+          Share Stream
+        </button>
+
       </div>
     </>
   ) : (
@@ -530,8 +526,9 @@ function Room() {
       </div>
     </>
   )}
+  
 </div>
-
+    
     </div>
 
   );

@@ -17,3 +17,12 @@ export const enterFullScreen = () => {
       element.msRequestFullscreen();
     }
   };
+
+  export const generateRoomId = () => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let roomId = '';
+    for (let i = 0; i < 5; i++) {
+        roomId += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return roomId;
+};
