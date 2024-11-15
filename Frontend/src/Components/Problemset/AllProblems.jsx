@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAllProblemsService } from '../../Services/Problem.service';
 import Loading from '../Loading/Loading.jsx';
 import { getSolvedProblemService } from '../../Services/Submissions.service.js';
+import { refreshTokenService } from '../../Services/Auth.service.js';
 
 
 const difficultyColors = {
@@ -23,6 +24,7 @@ const AllProblems = () => {
             if(response2)setSolvedProblems(response2);
         }
         helper();
+        refreshTokenService();
     },[]);
 
     if(!problems)return <Loading/>

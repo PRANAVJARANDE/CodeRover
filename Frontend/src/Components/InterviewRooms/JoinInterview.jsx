@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { isLoggedIn } from '../../Services/Auth.service.js'
+import { isLoggedIn, refreshTokenService } from '../../Services/Auth.service.js'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSocket } from '../../Features/useSocket.js';
 import Executing from '../Editor/Executing.jsx';
@@ -9,6 +9,10 @@ function JoinInterview() {
     const navigate=useNavigate();
     const [room,setroom]=useState('');
     const [joining,setjoining]=useState(false);
+
+    useEffect(()=>{
+        refreshTokenService();
+    },[])
 
     const handleJoinRoom = (data)=>{
         const {ta,room,id,requser_id}=data;

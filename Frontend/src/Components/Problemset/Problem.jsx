@@ -8,6 +8,7 @@ import DiscussProblem from './DiscussProblem.jsx';
 import EditorBox from '../Editor/EditorBox.jsx';
 import Submissions from '../Submission/Submissions.jsx';
 import { useLocation } from 'react-router-dom';
+import { refreshTokenService } from '../../Services/Auth.service.js';
 
 const difficultyColors = {
     easy: 'bg-green-500 text-white',
@@ -21,6 +22,12 @@ function Problem() {
     const [activeTab, setActiveTab] = useState('description'); 
     const location = useLocation();
     const { solved } = location.state || null;
+
+    useEffect(()=>{
+        refreshTokenService();
+    },[])
+
+
     useEffect(() => {
         const helper = async () => {
             const response = await getProblemService(id);

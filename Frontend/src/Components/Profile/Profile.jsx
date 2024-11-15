@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getMyProfile } from '../../Services/Auth.service';
+import { getMyProfile, refreshTokenService } from '../../Services/Auth.service';
 import Header from '../Header/Header.jsx';
 import Loading from '../Loading/Loading.jsx';
 import ProblemStats from './ProblemStats.jsx';
@@ -24,6 +24,7 @@ const Profile = () => {
       }
     };
     fetchUserProfile();
+    refreshTokenService();
   }, []);
 
   if (!user) return <Loading/>;

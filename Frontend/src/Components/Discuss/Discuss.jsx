@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchTweets } from '../../Services/Tweet.service';
 import Reply from './Reply';
 import Loading from '../Loading/Loading.jsx';
+import { refreshTokenService } from '../../Services/Auth.service.js';
 
 const Discuss = () => {
     const [tweets, setTweets] = useState(null);
@@ -14,7 +15,11 @@ const Discuss = () => {
             setTweets(response);
         };
         helper();
-    }, [replyToTweetId, hasNewReply]); 
+    }, [replyToTweetId, hasNewReply]);  
+
+    useEffect(()=>{
+        refreshTokenService();
+    },[])
 
     if (tweets === null) return (<Loading/>);
     return (

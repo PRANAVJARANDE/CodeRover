@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { isLoggedIn } from '../../Services/Auth.service.js';
+import { isLoggedIn, refreshTokenService } from '../../Services/Auth.service.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSocket } from '../../Features/useSocket.js';
 
@@ -15,6 +15,10 @@ const generateRoomId = () => {
 function HostInterview() {
     const socket = useSocket();
     const navigate = useNavigate();
+
+    useEffect(()=>{
+        refreshTokenService();
+    },[])
 
     const handleJoinRoom = (data) => {
         const {user,room} = data;
