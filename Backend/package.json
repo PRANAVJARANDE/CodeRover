@@ -4,7 +4,9 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon -r dotenv/config --experimental-json-modules src/server.js"
+    "dev": "nodemon -r dotenv/config --experimental-json-modules src/server.js",
+    "start": "node src/server.js", 
+    "build": "echo 'No build step required for this project'"
   },
   "author": "Pranav Jarande",
   "license": "ISC",
