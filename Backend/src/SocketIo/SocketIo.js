@@ -40,8 +40,12 @@ export const createSocketServer = () => {
             io.to(remoteSocketId).emit('interviewee:hasleft',data);
         });
         socket.on('code:change',(data)=>{
-            const {remoteSocketId,code}=data;
+            const {remoteSocketId}=data;
             io.to(remoteSocketId).emit('change:code',data);
+        });
+        socket.on('question:change',(data)=>{
+            const {remoteSocketId}=data;
+            io.to(remoteSocketId).emit('change:question',data);
         });
         socket.on('language:change',(data)=>{
             const {remoteSocketId,language}=data;

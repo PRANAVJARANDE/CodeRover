@@ -27,6 +27,7 @@ function JoinInterview() {
     },[socket]);
 
     const handleSubmit=(e)=>{
+        if(room=="")return;
         e.preventDefault();
         const nonparsedUser=localStorage.getItem('user');
         const user = JSON.parse(nonparsedUser); 
@@ -56,7 +57,7 @@ function JoinInterview() {
                                 <Executing text={"Joining room"}/>
                             </div>
                         </>:
-                        <button onClick={handleSubmit}
+                        <button onClick={(e)=>{handleSubmit(e)}}
                             className="px-6 py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
                         >
                             Join Room

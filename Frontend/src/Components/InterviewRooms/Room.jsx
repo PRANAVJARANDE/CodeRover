@@ -11,14 +11,18 @@ import ReactPlayer from 'react-player'
 import { defaultCodes, enterFullScreen } from './helper.js';
 import { toast } from 'react-hot-toast';
 import peer from '../../Services/peer.js';
+import Loading from '../Loading/Loading.jsx';
 
 function Room() {
   const navigate=useNavigate();
+  const [question,setquestion]=useState("");
   const [code, setCode] = useState(defaultCodes.cpp);
   const [cases, setCases] = useState([
     { id: 1, input: '', output: '' },
     { id: 2, input: '', output: '' }
   ]);
+
+  
   
   const { roomId } = useParams();
   const [remoteUser,setremoteUser]=useState(null);
@@ -83,18 +87,23 @@ function Room() {
   };
 
   const help2=({msg})=>{
-    if (mystream) {
-      const tracks = mystream.getTracks();
-      tracks.forEach(track => {
-        track.stop();
-      });
+    // if (mystream) {
+    //   const tracks = mystream.getTracks();
+    //   tracks.forEach(track => {
+    //     track.stop();
+    //   });
+    // }
+    // setMystream(null);
+    
+    if(!msg)
+    {
+      toast.error("Interviewee left");
+      setconnectionReady(false);
+      setremoteSocketId(false);
     }
-    setMystream(null);
-    toast.error(msg);
-    toast.error("Interviewee left");
-    setconnectionReady(false);
-    setremoteSocketId(false);
-    setMystream(null);
+    else toast.error(msg);
+    
+    //setMystream(null);
   }
 
   const help3=({code})=>{
@@ -113,6 +122,11 @@ function Room() {
   const help6=({exampleCasesExecution})=>{
     setExampleCasesExecution(exampleCasesExecution);
   }
+
+  const help7=({question})=>{
+    setquestion(question);
+  }
+
   const [remoteStream,setRemoteStream]=useState(null);
   useEffect(()=>{
     peer.peer.addEventListener('track',async ev =>{
@@ -141,6 +155,7 @@ function Room() {
       setMystream(stream);
     }
     sthel();
+    if(mystream && !previlige)sendstreams();
   },[])
 
   const handleIncommingCall=async({from,offer})=>{
@@ -182,6 +197,7 @@ function Room() {
     socket.on('host:hasleft',help1);
     socket.on('interviewee:hasleft',help2);
     socket.on('change:code',help3);
+    socket.on('change:question',help7);
     socket.on('change:language',help4);
     socket.on('change:cases',help5);
     socket.on('run:code',help6);
@@ -194,6 +210,7 @@ function Room() {
       socket.off('host:hasleft',help1);
       socket.off('interviewee:hasleft',help2);
       socket.off('change:code',help3);
+      socket.off('change:question',help7);
       socket.off('change:language',help4);
       socket.off('change:cases',help5);
       socket.off('run:code',help6);
@@ -202,7 +219,7 @@ function Room() {
       socket.off('peer:nego:needed',handleNegotiationIncomming);
       socket.off('peer:nego:final',handleFinalNego);
     }
-  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
+  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6,help7,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
 
   const [mystream,setMystream]=useState(null);
   const [isAudioOn,setAudioOn]=useState(true);
@@ -291,7 +308,6 @@ function Room() {
     }
     else 
     {
-      if(!msg)msg="Interviewee left";
       socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg});
       if (document.fullscreenElement) {
         document.exitFullscreen().catch((err) => {
@@ -305,14 +321,14 @@ function Room() {
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement && !previlige) {
-        exitroom({msg:"Tried to exit Fullscreen"});
-        toast.error("Tried to exit Fullscreen");
+        toast.error("You Tried to exit Fullscreen");
+        socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg:"Interviewee has Exited Fullscreen"});
       }
     };
     const handleVisibilityChange = () => {
         if (document.visibilityState === 'hidden' && !previlige) {
-            exitroom({ msg: "Tab switching found" });
-            toast.error("Tab switching found");
+            toast.error("You tried to switch Tab");
+            socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg:"Interviewee tried to switch Tab"});
         }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -328,11 +344,31 @@ function Room() {
     socket.emit('code:change',{remoteSocketId,code:e});
   }
 
+  const changeQs = (e) => {
+    const newQuestion = e.target.value;
+    setquestion(newQuestion);
+    socket.emit('question:change', { remoteSocketId, question: newQuestion });
+  };
+
+  const [showQuestion, setShowQuestion] = useState(false);
+  const dropdownqs = () => {
+    setShowQuestion((prev) => !prev);
+  };
+
+  if(!mystream)
+  {
+    return (
+      <>
+        <Loading/>
+      </>
+    )
+  }
+
   return (
     <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
       <div className='bg-gray-900 p-6 rounded-lg w-1/4 flex flex-col'>
         <div className="flex flex-col space-y-6">
-        <div className="flex items-center justify-evenly space-x-4">
+          <div className="flex items-center justify-evenly space-x-4">
           <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={exitroom}>
             <img className="h-6 w-6" src={'/endcall.png'} alt="end call" />
           </button>
@@ -342,9 +378,9 @@ function Room() {
           <button className={`py-2 px-4 rounded-lg shadow-md transition ${isVideoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`} onClick={toggleVideo}>
               <img className="h-6 w-6" src={isVideoOn ? '/camera-on.png' : '/camera-off.png'} alt="Camera" />
           </button>
-        </div>
+          </div>
 
-        <div className="space-y-4">
+          <div className="space-y-4">
             <h3 className="text-2xl font-extrabold text-gray-300 text-center">Test Cases</h3>
             {executing ? <Executing text={"Executing"}/> :
             <>
@@ -385,8 +421,8 @@ function Room() {
           <div className="bg-gray-800 p-2 rounded-lg shadow-lg">
             <Timer previlige={previlige} remoteSocketId={remoteSocketId}/>
           </div>
+          </div>
         </div>
-      </div>
       </div>
 
       <div className="px-6 bg-gray-900 mx-8 rounded-lg p-8 w-1/2">
@@ -398,6 +434,29 @@ function Room() {
               >
               Run
             </button>
+            <button onClick={dropdownqs} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+              >
+              See Question Here 
+            </button>
+
+            {showQuestion && (
+        <div className="fixed z-10 mt-16 w-full min-h-[600px] max-w-[1000px] max-h-[600px] overflow-y-auto bg-white text-black rounded-lg shadow-lg border border-gray-300 p-6">
+          <p className="text-md leading-relaxed">
+            <strong className="text-lg">Question:</strong> <br />
+            <hr className='border-2 border-slate-400'></hr>
+            {previlige ? (
+              <textarea
+                value={question}
+                onChange={(e)=>{changeQs(e)}}
+                className="w-full h-[600px] p-3 border border-gray-400 rounded-md text-black resize-none "
+              />
+            ) : (
+              <p className="whitespace-pre-wrap">{question}</p>
+            )}
+          </p>
+        </div>
+      )}
+            
           </div>
           <div className="flex space-x-4 items-center  rounded-t-lg">
             <select onChange={(e) => handleLanguageChange(e.target.value)}value={language}
@@ -527,7 +586,7 @@ function Room() {
     </>
   )}
   
-</div>
+      </div>
     
     </div>
 
