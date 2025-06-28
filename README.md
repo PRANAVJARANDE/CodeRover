@@ -3,7 +3,8 @@
 ![Coderover Logo](/Frontend/public/logo.png)
 
 ## Live Link  
-[https://coderover-frontend.onrender.com/](https://coderover-frontend.onrender.com/)  
+[Link 1 - Vercel](https://code-rover-frontend.vercel.app/)  
+[Link 2 - OnRender](https://coderover-frontend.onrender.com/)  
 
 **Note:** The Docker-based *Run Code* and *Submit Code* functionalities are currently not available in the deployed version. To access these features, please run the project locally with Docker configured.
 
