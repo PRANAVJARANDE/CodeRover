@@ -16,6 +16,7 @@ import Loading from '../Loading/Loading.jsx';
 function Room() {
   const navigate=useNavigate();
   const [question,setquestion]=useState("");
+  const [show_share_streams,set_show_share_streams]=useState(0);
   const [code, setCode] = useState(defaultCodes.cpp);
   const [cases, setCases] = useState([
     { id: 1, input: '', output: '' },
@@ -41,6 +42,7 @@ function Room() {
       if(extraInfo && extraInfo._id===user._id)setprevilige(true);
       else if(extraInfo)
       {
+          set_show_share_streams(1);
           enterFullScreen();
           setremoteSocketId(extraInfo);
           setconnectionReady(true);
@@ -127,6 +129,14 @@ function Room() {
     setquestion(question);
   }
 
+  const help9=({})=>{
+    if(previlige)
+    {
+      set_show_share_streams(1);
+    }
+  }
+
+
   const [remoteStream,setRemoteStream]=useState(null);
   useEffect(()=>{
     peer.peer.addEventListener('track',async ev =>{
@@ -155,7 +165,7 @@ function Room() {
       setMystream(stream);
     }
     sthel();
-    if(mystream && !previlige)sendstreams();
+    //if(mystream && !previlige)sendstreams();
   },[])
 
   const handleIncommingCall=async({from,offer})=>{
@@ -175,6 +185,12 @@ function Room() {
         peer.peer.addTrack(track,mystream);
       });
     }
+
+    if(!previlige)
+    {
+        socket.emit('set:share_streams',{to:remoteSocketId});
+    }
+    set_show_share_streams(0);
     
   }
 
@@ -192,6 +208,8 @@ function Room() {
     await peer.setLocalDescription(ans)
   }
 
+
+
   useEffect(()=>{
     socket.on('user:requested_to_join',handleJoinRequest);
     socket.on('host:hasleft',help1);
@@ -205,6 +223,7 @@ function Room() {
     socket.on('call:accepted',handleCallAccepted);
     socket.on('peer:nego:needed',handleNegotiationIncomming);
     socket.on('peer:nego:final',handleFinalNego);
+    socket.on('set:share_streams',help9);
     return ()=>{
       socket.off('user:requested_to_join',handleJoinRequest);
       socket.off('host:hasleft',help1);
@@ -218,8 +237,9 @@ function Room() {
       socket.off('call:accepted',handleCallAccepted);
       socket.off('peer:nego:needed',handleNegotiationIncomming);
       socket.off('peer:nego:final',handleFinalNego);
+      socket.off('set:share_streams',help9);
     }
-  },[socket,handleJoinRequest,help1,help2,help3,help4,help5,help6,help7,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
+  },[socket,handleJoinRequest,help1,help2,help3,help4,help9,help5,help6,help7,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
 
   const [mystream,setMystream]=useState(null);
   const [isAudioOn,setAudioOn]=useState(true);
@@ -541,12 +561,17 @@ function Room() {
             )}
           </div>
         </div>
-        <button 
+
+        { show_share_streams ? <>
+          <button 
           onClick={sendstreams} 
           className="px-6 py-2 bg-blue-600 text-white font-medium text-sm rounded-lg shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 transition-transform transform hover:scale-105 active:scale-95"
-        >
-          Share Stream
-        </button>
+          >
+            Share Stream
+          </button>
+          </>:<></>
+        }
+        
 
       </div>
     </>

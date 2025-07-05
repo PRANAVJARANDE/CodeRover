@@ -76,6 +76,9 @@ export const createSocketServer = () => {
         socket.on('call:accepted',({to,answer})=>{
             io.to(to).emit('call:accepted',{from:socket.id,answer});
         });
+        socket.on('set:share_streams',({to})=>{
+            io.to(to).emit('set:share_streams',{});
+        });
         socket.on('peer:nego:needed',({to,offer})=>{
             io.to(to).emit('peer:nego:needed',{from:socket.id,offer});
         });
