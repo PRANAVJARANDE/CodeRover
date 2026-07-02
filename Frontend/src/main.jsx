@@ -18,6 +18,7 @@ import store from './Store/store.js'
 import Room from './Components/InterviewRooms/Room.jsx'
 import Loading from './Components/Loading/Loading.jsx'
 import HostInterview from './Components/InterviewRooms/HostInterview.jsx'
+import VerificationVideoUpload from './Components/InterviewRooms/VerificationVideoUpload.jsx'
 
 
 let router=createBrowserRouter(
@@ -37,6 +38,7 @@ let router=createBrowserRouter(
         <Route path='/loading' element={<Loading/>}/>
       </Route>
       <Route path='/room/:roomId' element=<Room/>/>
+      <Route path='/verify-video-upload' element=<VerificationVideoUpload/>/>
     </>
   )
 )

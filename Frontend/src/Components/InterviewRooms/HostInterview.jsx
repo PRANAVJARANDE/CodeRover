@@ -1,54 +1,126 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { isLoggedIn } from '../../Services/Auth.service.js';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSocket } from '../../Features/useSocket.js';
-import { generateRoomId } from './helper.js';
+import { createInterviewService } from '../../Services/Interview.service.js';
 
 function HostInterview() {
     const socket = useSocket();
     const navigate = useNavigate();
+    const location = useLocation();
+    const [existingRoom,setExistingRoom]=useState(location.state?.roomId || '');
+    const [interviewerEmail,setInterviewerEmail]=useState('');
+    const [intervieweeEmail,setIntervieweeEmail]=useState('');
+    const [scheduledAt,setScheduledAt]=useState('');
+    const [scheduling,setScheduling]=useState(false);
+    const [scheduledInterview,setScheduledInterview]=useState(null);
 
-    const handleJoinRoom = (data) => {
+    const handleJoinRoom = useCallback((data) => {
         const {user,room} = data;
-        navigate(`/room/${room}`,{state:user});
-    };
+        navigate(`/room/${room}`,{state:{user,role:'interviewer'}});
+    },[navigate]);
 
     useEffect(() => {
         socket.on('room:join', handleJoinRoom);
         return () => {
             socket.off('room:join', handleJoinRoom);
         };
-    }, [socket]);
+    }, [socket,handleJoinRoom]);
 
-    const handleCreateRoom = (e) => {
+    const handleCreateInterview = async (e) => {
         e.preventDefault();
+        setScheduling(true);
+        const interview=await createInterviewService({
+            interviewerEmail,
+            intervieweeEmail,
+            scheduledAt,
+        });
+        setScheduling(false);
+        if(interview)
+        {
+            setScheduledInterview(interview);
+            setExistingRoom(interview.roomId);
+            setInterviewerEmail('');
+            setIntervieweeEmail('');
+            setScheduledAt('');
+        }
+    };
+
+    const handleRejoinRoom = (e) => {
+        e.preventDefault();
+        if(!existingRoom)return;
         const nonparsedUser = localStorage.getItem('user');
         const user = JSON.parse(nonparsedUser);
-        const randomRoomId = generateRoomId();
-        socket.emit('create-room', { room: randomRoomId, user});
+        socket.emit('room:join', { room: existingRoom, user, id: socket.id });
     };
 
     return (
-        <div className="h-screen flex bg-gray-800 text-white p-10">
-            <div className="w-1/3 flex items-center justify-center rounded-lg p-6 bg-gray-900">
-                <img src="/homelogo.png" alt="Logo" className="h-96 drop-shadow-lg rounded-full object-cover" />
-            </div>
-            <div className="w-2/3 flex bg-gray-900 items-center justify-center space-y-8 mx-10 rounded-lg">
+        <div className="min-h-screen bg-gray-800 text-white p-10">
+            <div className="min-h-[calc(100vh-5rem)] bg-gray-900 rounded-lg flex items-center justify-center p-8">
                 {isLoggedIn() ? (
-                    <div className='bg-gray-800 p-16 rounded-2xl'>
-                        <div className="flex flex-col gap-6 bg-gray-900 p-12 rounded-3xl shadow-lg max-w-md mx-auto">
+                    <div className='bg-gray-800 p-10 rounded-2xl w-full max-w-2xl'>
+                        <div className="flex flex-col gap-6 bg-gray-900 p-10 rounded-3xl shadow-lg">
                             <h2 className="text-4xl font-extrabold text-gray-100 mb-2 tracking-wide text-center">
-                                Create Room
+                                Create Interview
                             </h2>
                             <p className="text-gray-400 mb-4 text-lg">
-                                Room ID will be generated automatically.
+                                Schedule a room after validating both user emails.
                             </p>
-                            <button
-                                onClick={handleCreateRoom}
-                                className="px-6 py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
-                            >
-                                Create Room
-                            </button>
+                            <form onSubmit={handleCreateInterview} className="flex flex-col gap-4">
+                                <input
+                                    type="email"
+                                    value={interviewerEmail}
+                                    onChange={(e)=>setInterviewerEmail(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Interviewer email"
+                                />
+                                <input
+                                    type="email"
+                                    value={intervieweeEmail}
+                                    onChange={(e)=>setIntervieweeEmail(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Interviewee email"
+                                />
+                                <input
+                                    type="datetime-local"
+                                    value={scheduledAt}
+                                    onChange={(e)=>setScheduledAt(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={scheduling}
+                                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
+                                >
+                                    {scheduling ? 'Scheduling...' : 'Schedule Interview'}
+                                </button>
+                            </form>
+                            {scheduledInterview ? (
+                                <div className="rounded-lg border border-green-700 bg-green-950 p-4 text-sm text-green-100">
+                                    <p className="font-semibold">Interview scheduled</p>
+                                    <p>Room: {scheduledInterview.roomId}</p>
+                                    <p>{scheduledInterview.interviewer.fullname} with {scheduledInterview.interviewee.fullname}</p>
+                                </div>
+                            ) : null}
+                            <div className="border-t border-gray-700 pt-6">
+                                <label htmlFor="existingRoom" className="block text-gray-300 mb-2 font-semibold">
+                                    Rejoin existing room
+                                </label>
+                                <input
+                                    id="existingRoom"
+                                    type="text"
+                                    value={existingRoom}
+                                    onChange={(e)=>setExistingRoom(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter Room ID"
+                                />
+                                <button
+                                    onClick={handleRejoinRoom}
+                                    className="w-full px-6 py-3 mt-4 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold tracking-wide shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out"
+                                >
+                                    Rejoin Room
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (

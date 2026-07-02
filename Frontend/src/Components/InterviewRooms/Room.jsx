@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSocket } from '../../Features/useSocket.js';
 import Editor from '@monaco-editor/react';
@@ -8,16 +8,18 @@ import Executing from '../Editor/Executing.jsx'
 import ExampleCasesOutput from '../Editor/ExampleCasesOutput.jsx';
 import { useLocation } from 'react-router-dom';
 import ReactPlayer from 'react-player'
-import { defaultCodes, enterFullScreen } from './helper.js';
+import { defaultCodes } from './helper.js';
 import { toast } from 'react-hot-toast';
 import peer from '../../Services/peer.js';
 import Loading from '../Loading/Loading.jsx';
+import { getInterviewByRoomIdService, updateInterviewRoomStateService } from '../../Services/Interview.service.js';
+import { getPreJoinEnvironmentCheck } from '../../Services/Proctor.service.js';
 
 function Room() {
   const navigate=useNavigate();
   const [question,setquestion]=useState("");
-  const [show_share_streams,set_show_share_streams]=useState(0);
   const [code, setCode] = useState(defaultCodes.cpp);
+  const [language, setLanguage] = useState('cpp');
   const [cases, setCases] = useState([
     { id: 1, input: '', output: '' },
     { id: 2, input: '', output: '' }
@@ -28,67 +30,223 @@ function Room() {
   const { roomId } = useParams();
   const [remoteUser,setremoteUser]=useState(null);
   const [remoteSocketId,setremoteSocketId]=useState(null);
+  const remoteSocketIdRef=useRef(null);
+  const mystreamRef=useRef(null);
+  const mediaRequestRef=useRef(null);
+  const callStartedRef=useRef(false);
+  const handlingRemoteOfferRef=useRef(false);
+  const makingOfferRef=useRef(false);
+  const incomingScreenShareRef=useRef(false);
+  const screenStreamRef=useRef(null);
   const [requsername,setrequestusername]=useState([]);
   const [connectionReady,setconnectionReady]=useState(false);
+  const [mystream,setMystream]=useState(null);
+  const [mediaReady,setMediaReady]=useState(false);
+  const [isAudioOn,setAudioOn]=useState(true);
+  const [isVideoOn,setVideoOn]=useState(true);
+  const [remoteMediaStatus,setRemoteMediaStatus]=useState({audioOn:true,videoOn:true});
+  const [roomStateLoaded,setRoomStateLoaded]=useState(false);
+  const [screenStream,setScreenStream]=useState(null);
+  const [remoteScreenStream,setRemoteScreenStream]=useState(null);
+  const [remoteScreenAvailable,setRemoteScreenAvailable]=useState(false);
+  const [showRemoteScreen,setShowRemoteScreen]=useState(false);
   
   
   const [exampleCasesExecution, setExampleCasesExecution] = useState(null);
   const location = useLocation();
   const extraInfo = location.state;
+  const proctorCheckRef=useRef(extraInfo?.proctorCheck || null);
+  const verificationVideoRef=useRef(extraInfo?.verificationVideo || null);
+  const [roomParticipantRole,setRoomParticipantRole]=useState(extraInfo?.role || null);
   const [previlige,setprevilige]=useState(false);
+  const socket=useSocket();
+  const [peerVersion,setPeerVersion]=useState(0);
+  const redirectingAfterRefresh=useRef(
+    location.key === 'default' &&
+    typeof performance !== 'undefined' &&
+    performance.getEntriesByType?.('navigation')?.[0]?.type === 'reload'
+  ).current;
+
+  const resetPeerConnection=useCallback(()=>{
+    peer.resetPeer();
+    setPeerVersion((version)=>version+1);
+  },[]);
+
+  const updateRemoteSocketId=useCallback((id)=>{
+    remoteSocketIdRef.current=id;
+    setremoteSocketId(id);
+  },[]);
+
+  const ensureLocalStream=useCallback(async()=>{
+    if(mystreamRef.current)return mystreamRef.current;
+    if(mediaRequestRef.current)return mediaRequestRef.current;
+
+    mediaRequestRef.current=(async()=>{
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        mystreamRef.current=stream;
+        setMystream(stream);
+        setMediaReady(true);
+        return stream;
+      } catch (error) {
+        console.error("Unable to access camera/microphone", error);
+
+        try {
+          const audioOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          mystreamRef.current=audioOnlyStream;
+          setMystream(audioOnlyStream);
+          setMediaReady(true);
+          setVideoOn(false);
+          toast.error("Camera is busy, joining with microphone only");
+          return audioOnlyStream;
+        } catch (audioError) {
+          console.error("Unable to access microphone", audioError);
+          toast.error("Please close other apps using camera/mic, then rejoin the call");
+          setAudioOn(false);
+          setVideoOn(false);
+          setMediaReady(true);
+          return null;
+        }
+      } finally {
+        mediaRequestRef.current=null;
+      }
+    })();
+
+    return mediaRequestRef.current;
+  },[]);
+
   useEffect(()=>{
+      if(redirectingAfterRefresh)return;
+      let cancelled=false;
+      const initializeRoom=async()=>{
       const nonparsedUser = localStorage.getItem('user');
-      const user = JSON.parse(nonparsedUser); 
-      if(extraInfo && extraInfo._id===user._id)setprevilige(true);
-      else if(extraInfo)
+      const user = JSON.parse(nonparsedUser);
+      let resolvedRole=extraInfo?.role || null;
+      const isLegacyHostState=(extraInfo?.user && extraInfo.user._id===user._id) || (extraInfo && extraInfo._id===user._id);
+
+      if(!resolvedRole && isLegacyHostState)
       {
-          set_show_share_streams(1);
-          enterFullScreen();
-          setremoteSocketId(extraInfo);
+        resolvedRole='interviewer';
+      }
+
+      const interview=await getInterviewByRoomIdService(roomId);
+      if(cancelled)return;
+
+      if(interview?.roomState)
+      {
+        const {code: savedCode, language: savedLanguage, question: savedQuestion, cases: savedCases, exampleCasesExecution: savedExecution}=interview.roomState;
+        const nextLanguage=savedLanguage || 'cpp';
+        setLanguage(nextLanguage);
+        setCode(typeof savedCode === 'string' && savedCode.length ? savedCode : defaultCodes[nextLanguage] || defaultCodes.cpp);
+        setquestion(savedQuestion || "");
+        if(Array.isArray(savedCases) && savedCases.length)
+        {
+          setCases(savedCases);
+        }
+        if(savedExecution)
+        {
+          setExampleCasesExecution(savedExecution);
+        }
+      }
+
+      if(!resolvedRole && interview)
+      {
+        if(user.email===interview.interviewer.email) resolvedRole='interviewer';
+        else if(user.email===interview.interviewee.email) resolvedRole='interviewee';
+      }
+
+      setRoomParticipantRole(resolvedRole);
+      setprevilige(resolvedRole==='interviewer');
+      setRoomStateLoaded(true);
+
+      if(extraInfo?.remoteSocketId)
+      {
+          updateRemoteSocketId(extraInfo.remoteSocketId);
           setconnectionReady(true);
       }
-  },[remoteSocketId]);
+      else if(typeof extraInfo === 'string')
+      {
+          updateRemoteSocketId(extraInfo);
+          setconnectionReady(true);
+      }
+      };
 
-  const socket=useSocket();
+      initializeRoom();
+      return ()=>{
+        cancelled=true;
+      };
+  },[extraInfo, redirectingAfterRefresh, roomId, updateRemoteSocketId]);
 
-  const handleJoinRequest=({user,id,requser_id})=>{
+  useEffect(()=>{
+    if(!redirectingAfterRefresh)return;
+    toast.error('Call refreshed. Please rejoin from scheduled interviews.');
+    navigate('/join-interview',{replace:true,state:{roomId}});
+  },[navigate, redirectingAfterRefresh, roomId]);
+
+  const handleJoinRequest=useCallback(({user,id,requser_id,proctorCheck,verificationVideo})=>{
     setrequestusername((prev) => {
-      return [...prev, { user, id, requser_id }];
+      const alreadyExists=prev.some((request)=>{
+        if(request.user?._id && user?._id)return request.user._id===user._id;
+        return request.requser_id===requser_id;
+      });
+      if(alreadyExists)return prev;
+      return [...prev, { user, id, requser_id, proctorCheck, verificationVideo }];
     });
-  };
+  },[]);
 
-  const acceptrequest=(index)=>{
-    const setmystreamfunc = async()=>{
-      const offer=await peer.getOffer();
-      socket.emit("user:call",{remoteSocketId,offer});
-    }
-    setmystreamfunc();
-    
+  const handleAcceptedIntoRoom=useCallback(({ta})=>{
+    if(previlige || !ta)return;
+    updateRemoteSocketId(ta);
     setconnectionReady(true);
-    setremoteUser(requsername[index].user);
-    setremoteSocketId(requsername[index].id);
-    setrequestusername([]);
-    socket.emit('host:req_accepted',{ta:socket.id,user:requsername[index].user,room:roomId,id:requsername[index].id,requser_id:requsername[index].requser_id});
-  }
+  },[previlige, updateRemoteSocketId]);
 
-  const help1=()=>{
-    if (mystream) {
-      const tracks = mystream.getTracks();
+  const requestToJoinAsInterviewee=useCallback(async()=>{
+    if(roomParticipantRole!=='interviewee')return;
+    const nonparsedUser = localStorage.getItem('user');
+    const user = JSON.parse(nonparsedUser);
+    if(!proctorCheckRef.current)
+    {
+      proctorCheckRef.current=await getPreJoinEnvironmentCheck();
+    }
+    socket.emit('room:join_request',{room:roomId,user,id:socket.id,proctorCheck:proctorCheckRef.current,verificationVideo:verificationVideoRef.current});
+  },[roomId, roomParticipantRole, socket]);
+
+  const acceptrequest=useCallback((index)=>{
+    const request=requsername[index];
+    if(!request)return;
+    updateRemoteSocketId(request.id);
+    setconnectionReady(true);
+    setremoteUser(request.user);
+    setrequestusername([]);
+    socket.emit('host:req_accepted',{ta:socket.id,user:request.user,room:roomId,id:request.id,requser_id:request.requser_id});
+  },[requsername, roomId, socket, updateRemoteSocketId]);
+
+  const stopLocalStream=useCallback(()=>{
+    if (mystreamRef.current) {
+      const tracks = mystreamRef.current.getTracks();
       tracks.forEach(track => {
         track.stop();
       });
     }
+    mystreamRef.current=null;
+    mediaRequestRef.current=null;
     setMystream(null);
+    setMediaReady(false);
+  },[]);
+
+  const help1=useCallback(()=>{
+    stopLocalStream();
+    peer.resetPeer();
     if (document.fullscreenElement) {
       document.exitFullscreen().catch((err) => {
         console.log(`Error attempting to exit full-screen mode: ${err.message}`);
       });
     }
     toast.error('Host Ended call');
-    navigate('/join-interview');
-  };
+    navigate('/join-interview',{state:{roomId,role:'interviewee'}});
+  },[navigate, roomId, stopLocalStream]);
 
-  const help2=({msg})=>{
+  const help2=useCallback(({msg,disconnected})=>{
     // if (mystream) {
     //   const tracks = mystream.getTracks();
     //   tracks.forEach(track => {
@@ -97,121 +255,264 @@ function Room() {
     // }
     // setMystream(null);
     
-    if(!msg)
+    if(!msg || disconnected)
     {
-      toast.error("Interviewee left");
+      toast.error(msg || "Interviewee left");
       setconnectionReady(false);
-      setremoteSocketId(false);
+      updateRemoteSocketId(null);
+      setRemoteStream(null);
+      callStartedRef.current=false;
+      resetPeerConnection();
     }
     else toast.error(msg);
     
     //setMystream(null);
-  }
+  },[resetPeerConnection, updateRemoteSocketId])
 
-  const help3=({code})=>{
+  const help3=useCallback(({code})=>{
     setCode(code);
-  }
+  },[]);
 
-  const help4=({language})=>{
+  const help4=useCallback(({language})=>{
     setLanguage(language);
     setCode(defaultCodes[language]);
-  }
+  },[]);
 
-  const help5=({cases})=>{
+  const help5=useCallback(({cases})=>{
     setCases(cases);
-  }
+  },[]);
 
-  const help6=({exampleCasesExecution})=>{
+  const help6=useCallback(({exampleCasesExecution})=>{
     setExampleCasesExecution(exampleCasesExecution);
-  }
+  },[]);
 
-  const help7=({question})=>{
+  const help7=useCallback(({question})=>{
     setquestion(question);
-  }
-
-  const help9=({})=>{
-    if(previlige)
-    {
-      set_show_share_streams(1);
-    }
-  }
-
+  },[]);
 
   const [remoteStream,setRemoteStream]=useState(null);
+
+  const handleHostAvailable=useCallback(()=>{
+    if(roomParticipantRole!=='interviewee')return;
+    const hadActiveConnection=connectionReady || callStartedRef.current || Boolean(remoteSocketIdRef.current);
+    callStartedRef.current=false;
+    setconnectionReady(false);
+    setRemoteStream(null);
+    updateRemoteSocketId(null);
+    if(hadActiveConnection)
+    {
+      resetPeerConnection();
+    }
+    requestToJoinAsInterviewee();
+  },[connectionReady, requestToJoinAsInterviewee, resetPeerConnection, roomParticipantRole, updateRemoteSocketId]);
+
   useEffect(()=>{
-    peer.peer.addEventListener('track',async ev =>{
+    const currentPeer=peer.peer;
+    const handleTrack=async ev =>{
       const rstream=ev.streams;
       console.log("GOT TRACKS");
+      if(incomingScreenShareRef.current && ev.track.kind==='video')
+      {
+        setRemoteScreenStream(rstream[0]);
+        setRemoteScreenAvailable(true);
+        setShowRemoteScreen(true);
+        return;
+      }
       setRemoteStream(rstream[0]);
-    })
-  },[])
-
-  const handleNegotiation=async()=>{
-    const offer=await peer.getOffer();
-    socket.emit('peer:nego:needed',{offer,to:remoteSocketId});
-  }
-
-  useEffect(()=>{
-    peer.peer.addEventListener('negotiationneeded',handleNegotiation);
+    };
+    currentPeer.addEventListener('track',handleTrack);
     return ()=>{
-      peer.peer.removeEventListener('negotiationneeded',handleNegotiation);
+      currentPeer.removeEventListener('track',handleTrack);
+    };
+  },[peerVersion])
+
+  const handleNegotiation=useCallback(async()=>{
+    if(!remoteSocketIdRef.current)return;
+    if(peer.peer.signalingState !== 'stable')return;
+    if(handlingRemoteOfferRef.current || makingOfferRef.current)return;
+    makingOfferRef.current=true;
+    try {
+      peer.prepareConnection(mystreamRef.current);
+      const offer=await peer.getOffer();
+      socket.emit('peer:nego:needed',{offer,to:remoteSocketIdRef.current});
+    } finally {
+      makingOfferRef.current=false;
     }
-  },[handleNegotiation])
+  },[socket])
+
+  useEffect(()=>{
+    const currentPeer=peer.peer;
+    currentPeer.addEventListener('negotiationneeded',handleNegotiation);
+    return ()=>{
+      currentPeer.removeEventListener('negotiationneeded',handleNegotiation);
+    }
+  },[handleNegotiation,peerVersion])
+
+  useEffect(()=>{
+    const currentPeer=peer.peer;
+    currentPeer.onicecandidate=({candidate})=>{
+      if(candidate && remoteSocketIdRef.current)
+      {
+        socket.emit('peer:ice-candidate',{to:remoteSocketIdRef.current,candidate});
+      }
+    };
+
+    return ()=>{
+      currentPeer.onicecandidate=null;
+    }
+  },[peerVersion,socket])
 
 
   useEffect(()=>{
+    if(redirectingAfterRefresh)return;
     const sthel=async()=>{
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      setMystream(stream);
+      await ensureLocalStream();
     }
     sthel();
-    //if(mystream && !previlige)sendstreams();
+  },[ensureLocalStream,redirectingAfterRefresh])
+
+  useEffect(()=>{
+    if(redirectingAfterRefresh)return;
+    const startCallWhenReady=async()=>{
+      if(previlige || !connectionReady || !remoteSocketId || !mediaReady || callStartedRef.current)return;
+
+      callStartedRef.current=true;
+      peer.prepareConnection(mystreamRef.current);
+      const offer=await peer.getOffer();
+      socket.emit("user:call",{remoteSocketId,offer});
+    };
+
+    startCallWhenReady();
+  },[connectionReady, mediaReady, previlige, redirectingAfterRefresh, remoteSocketId, socket])
+
+  const sendMediaStatus=useCallback((audioOn=isAudioOn,videoOn=isVideoOn)=>{
+    if(remoteSocketIdRef.current)
+    {
+      socket.emit('media:status',{to:remoteSocketIdRef.current,audioOn,videoOn});
+    }
+  },[isAudioOn,isVideoOn,socket])
+
+  const handleIncommingCall=useCallback(async({from,offer})=>{
+    callStartedRef.current=true;
+    updateRemoteSocketId(from);
+    handlingRemoteOfferRef.current=true;
+    try {
+      const stream=await ensureLocalStream();
+      peer.prepareConnection(stream);
+      const answer=await peer.getAnswer(offer);
+      socket.emit('call:accepted',{to:from,answer});
+      sendMediaStatus();
+    } finally {
+      handlingRemoteOfferRef.current=false;
+    }
+  },[ensureLocalStream, sendMediaStatus, socket, updateRemoteSocketId])
+
+  const handleCallAccepted=useCallback(async({from,answer})=>{
+    callStartedRef.current=true;
+    updateRemoteSocketId(from);
+    await peer.setLocalDescription(answer);
+    peer.prepareConnection(mystreamRef.current);
+    sendMediaStatus();
+  },[sendMediaStatus, updateRemoteSocketId])
+
+  const handleNegotiationIncomming=useCallback(async({from,offer})=>{
+    updateRemoteSocketId(from);
+    handlingRemoteOfferRef.current=true;
+    try {
+      peer.prepareConnection(mystreamRef.current);
+      const ans=await peer.getAnswer(offer);
+      socket.emit('peer:nego:done',{to:from,ans}); 
+    } finally {
+      handlingRemoteOfferRef.current=false;
+    }
+  },[socket, updateRemoteSocketId])
+  
+  const handleFinalNego=useCallback(async({ans})=>{
+    await peer.setLocalDescription(ans)
   },[])
 
-  const handleIncommingCall=async({from,offer})=>{
-    const answer=await peer.getAnswer(offer);
-    setremoteSocketId(from);
-    socket.emit('call:accepted',{to:from,answer});
-  }
+  const handleIceCandidate=useCallback(async({from,candidate})=>{
+    updateRemoteSocketId(from);
+    await peer.addIceCandidate(candidate);
+  },[updateRemoteSocketId])
 
-  const sendstreams=()=>{
-    console.log("MS-",mystream);
-    console.log("RS-",remoteStream);
+  const handleRemoteMediaStatus=useCallback(({audioOn,videoOn})=>{
+    setRemoteMediaStatus({audioOn,videoOn});
+  },[])
 
-    if(mystream)
+  const sendProctorEvent=useCallback((type,message)=>{
+    toast.error(message);
+    if(remoteSocketIdRef.current)
     {
-      const tracks = mystream.getTracks();
-      tracks.forEach(track => {
-        peer.peer.addTrack(track,mystream);
-      });
+      socket.emit('proctor:event',{to:remoteSocketIdRef.current,type,message});
     }
+  },[socket])
 
-    if(!previlige)
+  const handleProctorEvent=useCallback(({message})=>{
+    if(previlige)
     {
-        socket.emit('set:share_streams',{to:remoteSocketId});
+      toast.error(message);
     }
-    set_show_share_streams(0);
-    
-  }
+  },[previlige])
 
-  const handleCallAccepted=async({from,answer})=>{
-    peer.setLocalDescription(answer);
-    sendstreams();
-  }
+  const handleRemoteScreenStarted=useCallback(()=>{
+    incomingScreenShareRef.current=true;
+    setRemoteScreenAvailable(true);
+    setShowRemoteScreen(true);
+    toast.success("Interviewee started screen sharing");
+  },[])
 
-  const handleNegotiationIncomming=async({from,offer})=>{
-    const ans=await peer.getAnswer(offer);
-    socket.emit('peer:nego:done',{to:from,ans}); 
-  }
-  
-  const handleFinalNego=async({ans})=>{
-    await peer.setLocalDescription(ans)
-  }
+  const handleRemoteScreenStopped=useCallback(()=>{
+    incomingScreenShareRef.current=false;
+    setRemoteScreenStream(null);
+    setRemoteScreenAvailable(false);
+    setShowRemoteScreen(false);
+    toast.error("Interviewee stopped screen sharing");
+  },[])
+
+  const stopScreenShare=useCallback(()=>{
+    if(!screenStreamRef.current)return;
+    peer.removeStream(screenStreamRef.current);
+    screenStreamRef.current.getTracks().forEach((track)=>track.stop());
+    screenStreamRef.current=null;
+    setScreenStream(null);
+    if(remoteSocketIdRef.current)
+    {
+      socket.emit('screen:share-stopped',{to:remoteSocketIdRef.current});
+    }
+  },[socket])
+
+  const startScreenShare=useCallback(async()=>{
+    if(previlige || !connectionReady || !remoteSocketIdRef.current)return;
+    try {
+      const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+      screenStreamRef.current=stream;
+      setScreenStream(stream);
+      incomingScreenShareRef.current=false;
+      socket.emit('screen:share-started',{to:remoteSocketIdRef.current});
+      peer.addStream(stream);
+      stream.getVideoTracks()[0].onended=()=>{
+        stopScreenShare();
+      };
+    } catch (error) {
+      console.error("Unable to share screen",error);
+      toast.error("Screen sharing was cancelled");
+    }
+  },[connectionReady, previlige, socket, stopScreenShare])
+
+  useEffect(()=>{
+    if(connectionReady && remoteSocketId)
+    {
+      sendMediaStatus();
+    }
+  },[connectionReady, remoteSocketId, sendMediaStatus])
 
 
 
   useEffect(()=>{
+    socket.on('room:join',handleAcceptedIntoRoom);
     socket.on('user:requested_to_join',handleJoinRequest);
+    socket.on('host:available',handleHostAvailable);
     socket.on('host:hasleft',help1);
     socket.on('interviewee:hasleft',help2);
     socket.on('change:code',help3);
@@ -223,9 +524,15 @@ function Room() {
     socket.on('call:accepted',handleCallAccepted);
     socket.on('peer:nego:needed',handleNegotiationIncomming);
     socket.on('peer:nego:final',handleFinalNego);
-    socket.on('set:share_streams',help9);
+    socket.on('peer:ice-candidate',handleIceCandidate);
+    socket.on('media:status',handleRemoteMediaStatus);
+    socket.on('proctor:event',handleProctorEvent);
+    socket.on('screen:share-started',handleRemoteScreenStarted);
+    socket.on('screen:share-stopped',handleRemoteScreenStopped);
     return ()=>{
+      socket.off('room:join',handleAcceptedIntoRoom);
       socket.off('user:requested_to_join',handleJoinRequest);
+      socket.off('host:available',handleHostAvailable);
       socket.off('host:hasleft',help1);
       socket.off('interviewee:hasleft',help2);
       socket.off('change:code',help3);
@@ -237,42 +544,87 @@ function Room() {
       socket.off('call:accepted',handleCallAccepted);
       socket.off('peer:nego:needed',handleNegotiationIncomming);
       socket.off('peer:nego:final',handleFinalNego);
-      socket.off('set:share_streams',help9);
+      socket.off('peer:ice-candidate',handleIceCandidate);
+      socket.off('media:status',handleRemoteMediaStatus);
+      socket.off('proctor:event',handleProctorEvent);
+      socket.off('screen:share-started',handleRemoteScreenStarted);
+      socket.off('screen:share-stopped',handleRemoteScreenStopped);
     }
-  },[socket,handleJoinRequest,help1,help2,help3,help4,help9,help5,help6,help7,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego]);
+  },[socket,handleAcceptedIntoRoom,handleJoinRequest,handleHostAvailable,help1,help2,help3,help4,help5,help6,help7,handleIncommingCall,handleCallAccepted,handleNegotiationIncomming,handleFinalNego,handleIceCandidate,handleRemoteMediaStatus,handleProctorEvent,handleRemoteScreenStarted,handleRemoteScreenStopped]);
 
-  const [mystream,setMystream]=useState(null);
-  const [isAudioOn,setAudioOn]=useState(true);
-  const [isVideoOn,setVideoOn]=useState(true);
+  useEffect(()=>{
+    if(redirectingAfterRefresh || !roomParticipantRole)return;
+    const nonparsedUser = localStorage.getItem('user');
+    const user = JSON.parse(nonparsedUser);
+
+    if(roomParticipantRole==='interviewer')
+    {
+      socket.emit('room:join',{room:roomId,user,id:socket.id});
+      socket.emit('host:ready',{room:roomId});
+      return;
+    }
+
+    requestToJoinAsInterviewee();
+  },[redirectingAfterRefresh, requestToJoinAsInterviewee, roomId, roomParticipantRole, socket]);
+
+  useEffect(()=>{
+    return ()=>{
+      if(screenStreamRef.current)
+      {
+        if(remoteSocketIdRef.current)
+        {
+          socket.emit('screen:share-stopped',{to:remoteSocketIdRef.current});
+        }
+        screenStreamRef.current.getTracks().forEach((track)=>track.stop());
+      }
+      peer.resetPeer();
+    };
+  },[socket]);
 
   const toggleAudio = () => {
     if (mystream) {
       const audioTrack = mystream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled; 
-        setAudioOn(audioTrack.enabled); 
+        setAudioOn(audioTrack.enabled);
+        sendMediaStatus(audioTrack.enabled,isVideoOn);
       }
     }
   };
   
   const toggleVideo = () => {
-    console.log("MS-",mystream);
-    console.log("RS-",remoteStream);
     if (mystream) {
       const videoTrack = mystream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled; 
         setVideoOn(videoTrack.enabled);
+        sendMediaStatus(isAudioOn,videoTrack.enabled);
       }
     }
   };
   
-  const [language, setLanguage] = useState('cpp');
   const handleLanguageChange = async (newLanguage) => {
       setLanguage(newLanguage);
       setCode(defaultCodes[newLanguage]);
       socket.emit('language:change',{remoteSocketId,language:newLanguage});
   };
+
+  useEffect(()=>{
+    if(redirectingAfterRefresh || !roomStateLoaded)return;
+    const autosaveTimer=setTimeout(()=>{
+      updateInterviewRoomStateService(roomId,{
+        code,
+        language,
+        question,
+        cases,
+        exampleCasesExecution,
+      });
+    },600);
+
+    return ()=>{
+      clearTimeout(autosaveTimer);
+    };
+  },[cases, code, exampleCasesExecution, language, question, redirectingAfterRefresh, roomId, roomStateLoaded]);
 
   const [theme, setTheme] = useState('vs-dark');
   const handleThemeChange = (newTheme) => {
@@ -314,17 +666,14 @@ function Room() {
   };
 
   const exitroom=({msg})=>{
-    if (mystream) {
-      const tracks = mystream.getTracks();
-      tracks.forEach(track => {
-        track.stop();
-      });
-    }
-    setMystream(null);
+    stopScreenShare();
+    stopLocalStream();
+    peer.resetPeer();
+    callStartedRef.current=false;
     if(previlige)
     {
       socket.emit('host:leave',{remoteSocketId,room:roomId});
-      navigate('/host-interview');
+      navigate('/host-interview',{state:{roomId}});
     }
     else 
     {
@@ -334,30 +683,40 @@ function Room() {
           console.log(`Error attempting to exit full-screen mode: ${err.message}`);
         });
       }
-      navigate('/join-interview');
+      navigate('/join-interview',{state:{roomId,role:'interviewee'}});
     }
   }
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement && !previlige) {
-        toast.error("You Tried to exit Fullscreen");
-        socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg:"Interviewee has Exited Fullscreen"});
+        sendProctorEvent('fullscreen-exit',"Interviewee exited fullscreen");
       }
     };
     const handleVisibilityChange = () => {
         if (document.visibilityState === 'hidden' && !previlige) {
-            toast.error("You tried to switch Tab");
-            socket.emit('interviewee:leave',{remoteSocketId,room:roomId,msg:"Interviewee tried to switch Tab"});
+            sendProctorEvent('tab-switch',"Tab switching detected");
         }
+    };
+    const handleClipboardEvent = (event) => {
+      if(previlige)return;
+      const eventType=event.type;
+      const message=eventType==='paste' ? "Paste detected" : eventType==='copy' ? "Copy detected" : "Cut detected";
+      sendProctorEvent(eventType,message);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('copy', handleClipboardEvent);
+    document.addEventListener('paste', handleClipboardEvent);
+    document.addEventListener('cut', handleClipboardEvent);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('copy', handleClipboardEvent);
+      document.removeEventListener('paste', handleClipboardEvent);
+      document.removeEventListener('cut', handleClipboardEvent);
     };
-  });
+  },[previlige, sendProctorEvent]);
 
   const changecode=(e)=>{
     setCode(e);
@@ -375,7 +734,7 @@ function Room() {
     setShowQuestion((prev) => !prev);
   };
 
-  if(!mystream)
+  if(!mediaReady)
   {
     return (
       <>
@@ -456,26 +815,114 @@ function Room() {
             </button>
             <button onClick={dropdownqs} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               >
-              See Question Here 
+              Question
             </button>
+            {!previlige && connectionReady && (
+              <button
+                onClick={screenStream ? stopScreenShare : startScreenShare}
+                className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 ${screenStream ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'}`}
+              >
+                {screenStream ? 'Stop Share' : 'Share Screen'}
+              </button>
+            )}
+            {previlige && remoteScreenAvailable && (
+              <button
+                onClick={()=>setShowRemoteScreen(true)}
+                className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                View Screen
+              </button>
+            )}
 
             {showQuestion && (
-        <div className="fixed z-10 mt-16 w-full min-h-[600px] max-w-[1000px] max-h-[600px] overflow-y-auto bg-white text-black rounded-lg shadow-lg border border-gray-300 p-6">
-          <p className="text-md leading-relaxed">
-            <strong className="text-lg">Question:</strong> <br />
-            <hr className='border-2 border-slate-400'></hr>
-            {previlige ? (
-              <textarea
-                value={question}
-                onChange={(e)=>{changeQs(e)}}
-                className="w-full h-[600px] p-3 border border-gray-400 rounded-md text-black resize-none "
-              />
-            ) : (
-              <p className="whitespace-pre-wrap">{question}</p>
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-8"
+                onClick={()=>setShowQuestion(false)}
+              >
+                <div
+                  className="flex h-[min(78vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-2xl"
+                  onClick={(event)=>event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-6 py-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Interview Problem</p>
+                      <h2 className="text-2xl font-extrabold text-white">Question</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={()=>setShowQuestion(false)}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-600 bg-gray-900 text-2xl leading-none text-gray-200 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      aria-label="Close question"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto bg-gray-950 p-6">
+                    {previlige ? (
+                      <textarea
+                        value={question}
+                        onChange={(e)=>{changeQs(e)}}
+                        placeholder="Write the interview question here..."
+                        className="h-full min-h-[420px] w-full resize-none rounded-lg border border-gray-700 bg-gray-900 p-5 text-lg leading-8 text-gray-100 shadow-inner outline-none placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+                      />
+                    ) : (
+                      <div className="min-h-[420px] rounded-lg border border-gray-700 bg-gray-900 p-6 text-lg leading-8 text-gray-100 shadow-inner">
+                        {question ? (
+                          <p className="whitespace-pre-wrap">{question}</p>
+                        ) : (
+                          <p className="text-gray-500">No question added yet.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
-          </p>
-        </div>
-      )}
+            {showRemoteScreen && previlige && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3"
+                onClick={()=>setShowRemoteScreen(false)}
+              >
+                <div
+                  className="flex h-[94vh] w-[96vw] flex-col overflow-hidden rounded-lg border border-purple-500/60 bg-gray-900 shadow-2xl"
+                  onClick={(event)=>event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-5 py-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-purple-300">Screen Share</p>
+                      <h2 className="text-xl font-extrabold text-white">Interviewee Screen</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={()=>setShowRemoteScreen(false)}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-600 bg-gray-900 text-2xl leading-none text-gray-200 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      aria-label="Close screen share"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2">
+                    {remoteScreenStream ? (
+                      <video
+                        ref={videoRef => {
+                          if (videoRef && remoteScreenStream) {
+                            videoRef.srcObject = remoteScreenStream;
+                          }
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="max-h-full max-w-full object-contain"
+                        style={{ width: 'auto', height: 'auto' }}
+                      />
+                    ) : (
+                      <p className="text-gray-400">Waiting for shared screen...</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             
           </div>
           <div className="flex space-x-4 items-center  rounded-t-lg">
@@ -523,9 +970,17 @@ function Room() {
       <div className="bg-gray-800 h-full p-4 w-full rounded-lg shadow-md flex flex-col justify-evenly items-center space-y-6">
     
         <div className="w-full bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-xl font-semibold mb-3 text-white text-center">{remoteUser? remoteUser.fullname : 'Interviewer'}</h3>
-          <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
-            {remoteStream ? (
+          <div className="mb-3 text-center">
+            <h3 className="text-xl font-semibold text-white">{remoteUser? remoteUser.fullname : 'Interviewer'}</h3>
+          </div>
+          <div className="relative bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+            <div className={`absolute right-2 top-2 z-10 flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${remoteMediaStatus.audioOn ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`}>
+              <img className="h-4 w-4" src={remoteMediaStatus.audioOn ? '/micon.png' : '/micoff.png'} alt={remoteMediaStatus.audioOn ? 'Unmuted' : 'Muted'} />
+              <span>{remoteMediaStatus.audioOn ? 'Unmuted' : 'Muted'}</span>
+            </div>
+            {!remoteMediaStatus.videoOn ? (
+              <p className="text-gray-400">Video turned off</p>
+            ) : remoteStream ? (
               <video
                 ref={videoRef => {
                   if (videoRef && remoteStream) {
@@ -538,15 +993,20 @@ function Room() {
                 className="rounded-lg h-full w-full"
               />
               ) : (
-                <p className="text-gray-400">Video Off</p>
+                <p className="text-gray-400">Waiting for video</p>
               )}
           </div>
         </div>
 
         <div className="w-full bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-xl font-semibold mb-3 text-white text-center">You</h3>
-          <ReactPlayer muted={!isAudioOn} height="0%" width="0%" url={mystream}/>
-          <div className="bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+          <div className="mb-3 text-center">
+            <h3 className="text-xl font-semibold text-white">You</h3>
+          </div>
+          <div className="relative bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+            <div className={`absolute right-2 top-2 z-10 flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${isAudioOn ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`}>
+              <img className="h-4 w-4" src={isAudioOn ? '/micon.png' : '/micoff.png'} alt={isAudioOn ? 'Unmuted' : 'Muted'} />
+              <span>{isAudioOn ? 'Unmuted' : 'Muted'}</span>
+            </div>
             {isVideoOn ? (
               <ReactPlayer 
                 playing={isVideoOn} 
@@ -557,25 +1017,13 @@ function Room() {
                 className="rounded-lg"
               />
             ) : (
-              <p className="text-gray-400">Video Off</p>
+              <p className="text-gray-400">Video turned off</p>
             )}
           </div>
         </div>
-
-        { show_share_streams ? <>
-          <button 
-          onClick={sendstreams} 
-          className="px-6 py-2 bg-blue-600 text-white font-medium text-sm rounded-lg shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 transition-transform transform hover:scale-105 active:scale-95"
-          >
-            Share Stream
-          </button>
-          </>:<></>
-        }
-        
-
       </div>
     </>
-  ) : (
+  ) : previlige ? (
     <>
       <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
             <p className="text-3xl font-bold text-center">Room: {roomId}</p>
@@ -592,21 +1040,100 @@ function Room() {
         {requsername.length ? (
           <>
           {requsername.map((x,index)=>(
-            <div key={index} className="flex items-evenly items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md">
-              <img className='h-10 w-10 rounded-full border-gray-50 border-2' src={x.user.avatar}/>
-              <p className="text-gray-300">{x.user.fullname}</p>
-              <button 
-                onClick={()=>{acceptrequest(index)}} 
-                className="px-2 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
-              >
-                Accept
-              </button>
+            <div key={index} className="space-y-4 rounded-lg bg-gray-700 p-4 shadow-md">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <img className='h-10 w-10 rounded-full border-gray-50 border-2' src={x.user.avatar}/>
+                  <div>
+                    <p className="font-semibold text-gray-100">{x.user.fullname}</p>
+                    <p className="text-xs text-gray-400">Waiting for approval</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={()=>{acceptrequest(index)}} 
+                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
+                >
+                  Accept
+                </button>
+              </div>
+              <div className="rounded-lg border border-gray-600 bg-gray-800 p-3 text-sm">
+                <p className="mb-2 font-semibold text-blue-300">Pre-join check</p>
+                {x.proctorCheck ? (
+                  <div className="space-y-2 text-gray-300">
+                    <p>
+                      <span className="font-semibold text-gray-100">Monitors: </span>
+                      {x.proctorCheck.monitors?.status === 'available'
+                        ? `${x.proctorCheck.monitors.count} detected${x.proctorCheck.monitors.isExtended ? ' (extended display)' : ''}`
+                        : x.proctorCheck.monitors?.message || 'Monitor details unavailable'}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-gray-100">Screen: </span>
+                      {x.proctorCheck.screen?.width} x {x.proctorCheck.screen?.height}, DPR {x.proctorCheck.screen?.pixelRatio}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Checked at {new Date(x.proctorCheck.checkedAt).toLocaleString()}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">No pre-join check received.</p>
+                )}
+              </div>
+              <div className="rounded-lg border border-gray-600 bg-gray-800 p-3 text-sm">
+                <p className="mb-2 font-semibold text-yellow-300">Verification video</p>
+                {x.verificationVideo ? (
+                  <div className="space-y-2 text-gray-300">
+                    <p>
+                      <span className="font-semibold text-gray-100">Secret code: </span>
+                      <span className="rounded bg-yellow-500/20 px-2 py-1 font-black tracking-widest text-yellow-200">{x.verificationVideo.code}</span>
+                    </p>
+                    {x.verificationVideo.skipped ? (
+                      <p className="rounded-lg bg-yellow-600/20 p-2 font-semibold text-yellow-200">
+                        Verification video skipped by interviewee.
+                      </p>
+                    ) : (
+                      <>
+                        <p>
+                          <span className="font-semibold text-gray-100">Duration: </span>
+                          {x.verificationVideo.duration ? `${Math.round(x.verificationVideo.duration)}s` : 'Not provided'}
+                        </p>
+                        <a
+                          href={x.verificationVideo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                        >
+                          Open uploaded video
+                        </a>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-400">No verification video uploaded.</p>
+                )}
+              </div>
             </div>
           ))}
           </>
         ) : (
           <p className="text-gray-400">No requests yet.</p>
         )}
+      </div>
+    </>
+  ) : (
+    <>
+      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
+            <p className="text-3xl font-bold text-center">Room: {roomId}</p>
+            {copySuccess? <>
+              <p className="text-lg text-white text-center">Copied!</p>
+            </>:
+            <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
+              <img className='w-6' src='/copy.png'/>
+            </button>
+            }
+      </div>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+        <p className="text-lg font-semibold mb-4">Waiting for interviewer</p>
+        <p className="text-gray-400">You are in the room. The call will start after the interviewer accepts your request.</p>
       </div>
     </>
   )}

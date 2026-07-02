@@ -1,0 +1,60 @@
+import mongoose,{Schema} from 'mongoose';
+
+const interviewSchema=new Schema({
+    roomId:{
+        type:String,
+        required:true,
+        unique:true,
+        trim:true,
+    },
+    interviewer:{
+        type:Schema.Types.ObjectId,
+        ref:'User',
+        required:true,
+    },
+    interviewee:{
+        type:Schema.Types.ObjectId,
+        ref:'User',
+        required:true,
+    },
+    scheduledAt:{
+        type:Date,
+        required:true,
+    },
+    createdBy:{
+        type:Schema.Types.ObjectId,
+        ref:'User',
+        required:true,
+    },
+    roomState:{
+        code:{
+            type:String,
+            default:"",
+        },
+        language:{
+            type:String,
+            default:"cpp",
+        },
+        question:{
+            type:String,
+            default:"",
+        },
+        cases:{
+            type:[{
+                id:Number,
+                input:String,
+                output:String,
+            }],
+            default:[
+                {id:1,input:"",output:""},
+                {id:2,input:"",output:""},
+            ],
+        },
+        exampleCasesExecution:{
+            type:Schema.Types.Mixed,
+            default:null,
+        },
+    },
+},{timestamps:true});
+
+export const Interview=mongoose.model('Interview',interviewSchema);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
 const Header = () => {
@@ -34,13 +34,12 @@ const Header = () => {
           </NavLink>
         </nav>
 
-        <Link to={'/profile'}>
         <div className="flex items-center space-x-4">
           {user ? (
-            <div className="flex items-center space-x-3">
+            <Link to="/profile" className="flex items-center space-x-3">
               <img src={user.avatar || '/public/defaultuser.png'} alt="User" className="w-10 h-10 rounded-full border-2 border-yellow-500"/>
               <span className="text-lg font-semibold text-gray-300">{user.username || 'user'}</span>
-            </div>
+            </Link>
           ) : (
             <div className="flex items-center space-x-4">
               <NavLink to="/login" className="text-lg text-white bg-blue-600 hover:bg-yellow-500 transition duration-300 py-2 px-4 rounded-md shadow-md">Login</NavLink>
@@ -48,7 +47,6 @@ const Header = () => {
             </div>
           )}
         </div>
-        </Link>
       </div>
     </header>
   );
