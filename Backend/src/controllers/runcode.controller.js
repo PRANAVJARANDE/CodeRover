@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { validateCode, validateInput } from "../middlewares/validatecode.middleware.js";
 import { saveCodeFiles, saveInputFiles } from "../middlewares/saveCodeFile.middleware.js";
-import { runCompilerDockerContainer, runExampleCasesDockerContainer, runTestCasesDokerContainer } from "../middlewares/runDocker.middleware.js";
+import { runCompilerDockerContainer, runExampleCasesDockerContainer, runTestCasesDokerContainer } from "../middlewares/dockerExecutor.middleware.js";
 import { v4 as uuidv4 } from 'uuid';
 import { Problem } from "../models/problem.model.js";
 import {Submission} from '../models/submission.model.js'
@@ -26,10 +26,10 @@ const runCode = asyncHandler(async (req, res) => {
         validateCode(language,code);
         validateInput(language,input);
         console.log("code and input is validated");
-        filename = language==='java' ? 'Main':uuidv4();
+        filename = uuidv4();
         saveCodeFiles(code,language,filename);
         saveInputFiles(input,filename);
-        runCompilerDockerContainer(filename,language,res);
+        await runCompilerDockerContainer(filename,language,res);
     } catch (error) {
         return res.status(400).json(new ApiResponse(400,error,"Error"));
     }
@@ -44,7 +44,7 @@ const run_example_cases=asyncHandler(async(req,res)=>{
             validateInput(language,x?.input);
         });
         console.log("code and input is validated");
-        filename = language==='java' ? 'Main':uuidv4();
+        filename = uuidv4();
         saveCodeFiles(code,language,filename);
         const response=await runExampleCasesDockerContainer(example_cases,language,filename,res);
         return res.status(response.statusCode).json(new ApiResponse(response.statusCode,response,"Executed Successfully"));
@@ -63,7 +63,7 @@ const runtestcases = asyncHandler(async (req, res) => {
             validateInput(language, x.input);
         });
         console.log("code and input is validated");
-        filename = language === 'java' ? 'Main' : uuidv4();
+        filename = uuidv4();
         saveCodeFiles(code, language, filename);
         
         const submissionStatus = await runTestCasesDokerContainer(problem?.test_cases, language, filename);
