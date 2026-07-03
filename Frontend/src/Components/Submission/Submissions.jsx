@@ -17,12 +17,12 @@ function Submissions({ problem_id,displayproblem}) {
     }, []);
 
     return (
-        <div className="p-4 bg-gray-700 rounded-lg max-h-screen overflow-y-auto">
+        <div className="max-h-screen overflow-y-auto">
     {loading ? (
         <Loading />
     ) : (
         submissions.length === 0 ? (
-            <p className="bg-gray-900 rounded-lg text-white font-extrabold p-2 text-2xl ">No submissions</p>
+            <p className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 text-center text-xl font-extrabold text-white">No submissions</p>
         ) : (
             <div className="space-y-4">
                 {submissions.map((submission, index) => (

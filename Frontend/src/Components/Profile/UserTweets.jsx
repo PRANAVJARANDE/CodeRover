@@ -2,22 +2,22 @@ import React from 'react'
 
 function UserTweets({user}) {
     return (
-        <div className="bg-gray-700 p-5 rounded-lg shadow-lg mx-auto w-full max-h-screen overflow-y-auto ">
-            <h2 className="text-3xl font-bold text-white mb-6 text-center">Your Tweets</h2>
+        <div className="max-h-screen w-full overflow-y-auto">
+            <h2 className="mb-5 text-2xl font-black text-white">Your Tweets</h2>
                 {(user.mytweets && user.mytweets.length > 0) ? (
                     user.mytweets.map((tweet, index) => (
-                        <div key={index} className="bg-gray-900 p-6 mb-10 rounded-lg shadow-md">
-                            <div className="flex flex-row-reverse items-center justify-between mb-3">
-                                <span className="text-gray-400 text-lg">
+                        <div key={index} className="mb-4 rounded-2xl border border-white/10 bg-slate-900/80 p-5 shadow-md">
+                            <div className="mb-3 flex items-center justify-between">
+                                <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-slate-500">
                                     {new Date(tweet.createdAt).toLocaleDateString()}
                                 </span>
                             </div>
-                            <p className="text-white mb-4 text-xl">{tweet.content}</p>
-                            {tweet.image && (<img src={tweet.image} alt="Tweet" className="rounded-lg mb-4 max-w-full h-auto"/>)}
+                            <p className="mb-4 whitespace-pre-line text-base leading-7 text-slate-200">{tweet.content}</p>
+                            {tweet.image && (<img src={tweet.image} alt="Tweet" className="mb-4 max-h-[420px] w-full rounded-2xl border border-white/10 object-cover"/>)}
                         </div>
                     ))
                 ) : (
-                    <div className="text-gray-400">No tweets available</div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-8 text-center text-slate-500">No tweets available</div>
                 )}
         </div>
     )

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { isLoggedIn} from '../../Services/Auth.service.js'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSocket } from '../../Features/useSocket.js';
 import Executing from '../Editor/Executing.jsx';
-import { getMyInterviewsService, getVerificationUploadService, uploadVerificationVideoService } from '../../Services/Interview.service.js';
+import { createInterviewService, getMyInterviewsService, getVerificationUploadService, uploadVerificationVideoService } from '../../Services/Interview.service.js';
 import { getPreJoinEnvironmentCheck } from '../../Services/Proctor.service.js';
 
 const generateVerificationCode = () => {
@@ -29,6 +29,18 @@ function JoinInterview() {
     const [verificationRequest,setVerificationRequest]=useState(null);
     const [localUploadError,setLocalUploadError]=useState('');
     const [localUploading,setLocalUploading]=useState(false);
+    const [showCreateForm,setShowCreateForm]=useState(false);
+    const [interviewerEmail,setInterviewerEmail]=useState('');
+    const [intervieweeEmail,setIntervieweeEmail]=useState('');
+    const [scheduledAt,setScheduledAt]=useState('');
+    const [scheduling,setScheduling]=useState(false);
+    const [scheduledInterview,setScheduledInterview]=useState(null);
+
+    const sortedScheduledInterviews = useMemo(() => {
+        return [...scheduledInterviews].sort((first,second)=>{
+            return new Date(second.scheduledAt).getTime() - new Date(first.scheduledAt).getTime();
+        });
+    },[scheduledInterviews]);
 
 
     const handleJoinRoom = useCallback((data)=>{
@@ -189,11 +201,32 @@ function JoinInterview() {
         }
     };
 
+    const handleCreateInterview = async(e) => {
+        e.preventDefault();
+        setScheduling(true);
+        const interview=await createInterviewService({
+            interviewerEmail,
+            intervieweeEmail,
+            scheduledAt,
+        });
+        setScheduling(false);
+
+        if(interview)
+        {
+            setScheduledInterview(interview);
+            setScheduledInterviews((current)=>[interview,...current]);
+            setInterviewerEmail('');
+            setIntervieweeEmail('');
+            setScheduledAt('');
+            setShowCreateForm(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gray-800 text-white p-10">
-            <div className="min-h-[calc(100vh-5rem)] bg-gray-900 rounded-lg p-10">
+        <div className="min-h-screen bg-slate-950 px-5 py-10 text-white lg:px-8">
+            <div className="mx-auto max-w-7xl">
                 {isLoggedIn() ? (
-                <div className="bg-gray-800 p-8 rounded-2xl min-h-full">
+                <div>
                     {verificationRequest && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-6 py-8">
                             <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900 p-6 shadow-2xl">
@@ -260,29 +293,102 @@ function JoinInterview() {
                             </div>
                         </div>
                     )}
-                    <h2 className="text-3xl font-extrabold text-gray-100 mb-6">Scheduled Interviews</h2>
+                        <div className="mb-8 rounded-3xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-black/20">
+                        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                            <div>
+                                <p className="text-sm font-black uppercase tracking-[0.3em] text-cyan-300">Interview</p>
+                                <h1 className="mt-3 text-4xl font-black text-white md:text-5xl">Schedule, join, and run interviews</h1>
+                                <p className="mt-4 max-w-2xl text-slate-400">
+                                    See your scheduled rooms and create new interview sessions from one clean workspace.
+                                </p>
+                            </div>
+                            <button
+                                onClick={()=>setShowCreateForm((value)=>!value)}
+                                className="rounded-full bg-cyan-300 px-6 py-3 font-black text-slate-950 shadow-xl shadow-cyan-950/30 transition hover:-translate-y-1 hover:bg-white"
+                            >
+                                {showCreateForm ? 'Hide Form' : 'Create Interview'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {showCreateForm && (
+                        <div className="mb-8 rounded-3xl border border-cyan-300/20 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+                            <div className="mb-5 flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-300">Create Interview</p>
+                                    <h2 className="mt-2 text-2xl font-black text-white">Schedule a validated room</h2>
+                                </div>
+                            </div>
+                            <form onSubmit={handleCreateInterview} className="grid gap-4 lg:grid-cols-[1fr_1fr_260px_auto]">
+                                <input
+                                    type="email"
+                                    value={interviewerEmail}
+                                    onChange={(e)=>setInterviewerEmail(e.target.value)}
+                                    className="rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/50"
+                                    placeholder="Interviewer email"
+                                    required
+                                />
+                                <input
+                                    type="email"
+                                    value={intervieweeEmail}
+                                    onChange={(e)=>setIntervieweeEmail(e.target.value)}
+                                    className="rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/50"
+                                    placeholder="Interviewee email"
+                                    required
+                                />
+                                <input
+                                    type="datetime-local"
+                                    value={scheduledAt}
+                                    onChange={(e)=>setScheduledAt(e.target.value)}
+                                    className="rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-white outline-none transition focus:border-cyan-300/50"
+                                    required
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={scheduling}
+                                    className="rounded-2xl bg-emerald-400 px-6 py-4 font-black text-slate-950 transition hover:bg-white disabled:bg-slate-600 disabled:text-slate-300"
+                                >
+                                    {scheduling ? 'Scheduling...' : 'Schedule'}
+                                </button>
+                            </form>
+                            {scheduledInterview ? (
+                                <div className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                                    <p className="font-black">Interview scheduled</p>
+                                    <p className="mt-1">Room: {scheduledInterview.roomId}</p>
+                                    <p>{scheduledInterview.interviewer.fullname} with {scheduledInterview.interviewee.fullname}</p>
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
+
+                    <div className="mb-5 flex items-center justify-between">
+                        <h2 className="text-2xl font-black text-white">Scheduled Interviews</h2>
+                        <span className="rounded-full border border-white/10 bg-slate-900/70 px-4 py-2 text-sm font-bold text-slate-300">
+                            {sortedScheduledInterviews.length} rooms
+                        </span>
+                    </div>
                     {loadingInterviews ? (
                         <Executing text="Loading interviews"/>
-                    ) : scheduledInterviews.length ? (
-                        <div className="grid grid-cols-2 gap-4 max-h-[700px] overflow-y-auto pr-2">
-                            {scheduledInterviews.map((interview)=>(
-                                <div key={interview._id} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+                    ) : sortedScheduledInterviews.length ? (
+                        <div className="grid gap-5 lg:grid-cols-2">
+                            {sortedScheduledInterviews.map((interview)=>(
+                                <div key={interview._id} className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/15 transition hover:border-cyan-300/30 hover:bg-slate-800/80">
                                     <div className="flex justify-between items-start gap-3">
                                         <div>
-                                            <div className="mb-3 inline-block rounded-lg bg-blue-600 px-3 py-1 text-sm font-semibold text-white">
+                                            <div className="mb-3 inline-block rounded-full bg-cyan-300 px-3 py-1 text-sm font-black text-slate-950">
                                                 You are {getInterviewRole(interview)}
                                             </div>
-                                            <p className="text-sm text-gray-400">{formatSchedule(interview.scheduledAt)}</p>
-                                            <p className="mt-2 text-white font-semibold">Interviewer: {interview.interviewer.fullname}</p>
-                                            <p className="text-gray-300 text-sm">{interview.interviewer.email}</p>
-                                            <p className="mt-2 text-white font-semibold">Interviewee: {interview.interviewee.fullname}</p>
-                                            <p className="text-gray-300 text-sm">{interview.interviewee.email}</p>
-                                            <p className="mt-2 text-yellow-400 text-sm">Room: {interview.roomId}</p>
+                                            <p className="text-sm font-bold text-slate-400">{formatSchedule(interview.scheduledAt)}</p>
+                                            <p className="mt-3 text-white font-black">Interviewer: {interview.interviewer.fullname}</p>
+                                            <p className="text-slate-400 text-sm">{interview.interviewer.email}</p>
+                                            <p className="mt-3 text-white font-black">Interviewee: {interview.interviewee.fullname}</p>
+                                            <p className="text-slate-400 text-sm">{interview.interviewee.email}</p>
+                                            <p className="mt-3 text-cyan-300 text-sm font-black">Room: {interview.roomId}</p>
                                         </div>
                                         <button
                                             onClick={()=>joinScheduledInterview(interview)}
                                             disabled={joining}
-                                            className="shrink-0 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-lg text-white font-semibold"
+                                            className="shrink-0 rounded-full bg-emerald-400 px-5 py-2 font-black text-slate-950 transition hover:bg-white disabled:bg-slate-600 disabled:text-slate-300"
                                         >
                                             {joining ? 'Joining...' : 'Join'}
                                         </button>
@@ -291,16 +397,18 @@ function JoinInterview() {
                             ))}
                         </div>
                     ) : (
-                        <p className="text-gray-400">No scheduled interviews found.</p>
+                        <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-10 text-center text-slate-400">
+                            No scheduled interviews found. Create one using the button above.
+                        </div>
                     )}
                 </div>
-                    ) : (<div className='p-40 bg-gray-800 rounded-lg'>
-                        <div className=" flex items-center justify-center n bg-gray-800 rounded-lg">
-                                <div className="text-center bg-white p-8 rounded-lg shadow-lg">
+                    ) : (<div className='rounded-3xl border border-white/10 bg-slate-900/70 p-10'>
+                        <div className=" flex items-center justify-center">
+                                <div className="max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
                                     <h2 className="text-2xl font-bold text-gray-800 mb-4">You need to login</h2>
-                                    <p className="text-gray-600 mb-6">Please log to Join Interview.</p>
+                                    <p className="text-gray-600 mb-6">Please login to open interviews.</p>
                                     <Link to="/login"
-                                        className="inline-block px-6 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition duration-300"
+                                        className="inline-block rounded-full bg-slate-950 px-6 py-3 font-black text-white transition hover:bg-cyan-700"
                                             >
                                         Login Now
                                     </Link>
