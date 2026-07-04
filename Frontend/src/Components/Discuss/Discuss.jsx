@@ -18,16 +18,16 @@ const Discuss = () => {
 
     if (tweets === null) return (<Loading/>);
     return (
-        <div className="min-h-screen bg-slate-950 px-5 py-8 text-white lg:px-8">
+        <div className="min-h-screen bg-slate-800 px-5 py-8 text-white lg:px-8">
             <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[380px_1fr]">
                 <aside className="lg:sticky lg:top-28 lg:h-fit">
-                    <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+                    <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20">
                         <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Discuss</p>
                         <h1 className="mt-3 text-3xl font-black text-white">Share what you are thinking</h1>
                         <p className="mt-3 text-sm leading-6 text-slate-400">Post a doubt, share a trick, or reply to someone solving the same thing.</p>
                     </div>
 
-                    <div className="mt-5 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+                    <div className="mt-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-black/20">
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="text-lg font-black text-white">Create post</h2>
                         </div>
@@ -36,7 +36,7 @@ const Discuss = () => {
                 </aside>
 
                 <section>
-                    <div className="mb-5 flex items-center justify-between rounded-3xl border border-white/10 bg-slate-900/70 px-5 py-4">
+                    <div className="mb-5 flex items-center justify-between rounded-3xl border border-white/10 bg-slate-950/70 px-5 py-4">
                         <h2 className="text-xl font-black text-white">Recent discussions</h2>
                         <span className="text-sm font-bold text-slate-500">Newest first</span>
                     </div>
@@ -44,7 +44,7 @@ const Discuss = () => {
                 <div className="space-y-4">
                     {tweets && tweets.length > 0 ? (
                         tweets.map((tweet, index) => (
-                            <div key={index} className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/15 transition hover:border-cyan-300/25 hover:bg-slate-800/80">
+                            <div key={index} className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-black/15 transition hover:border-cyan-300/25 hover:bg-slate-900/80">
                                 <div className="mb-3 flex items-center justify-between gap-4">
                                     <div className="flex flex-row items-center gap-3">
                                         {tweet?.owner?.avatar && (
@@ -63,10 +63,10 @@ const Discuss = () => {
                                 {tweet.image && <img src={tweet.image} alt="Tweet" className="mb-4 max-h-[420px] w-full rounded-2xl border border-white/10 object-cover" />}
 
                                 {tweet.replys && tweet.replys.length > 0 && (
-                                    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                                    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/80 p-4">
                                         <h3 className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-cyan-300">Replies</h3>
                                         {tweet.replys.map((reply, replyIndex) => (
-                                            <div key={replyIndex} className="mb-3 rounded-2xl bg-slate-800/80 p-3 last:mb-0">
+                                            <div key={replyIndex} className="mb-3 rounded-2xl bg-slate-900/80 p-3 last:mb-0">
                                                 <div className="mb-2 flex items-center gap-2">
                                                     {reply?.owner?.avatar && (
                                                         <img src={reply.owner.avatar} alt="Reply Owner Avatar" className="h-7 w-7 rounded-full object-cover" />
@@ -94,7 +94,7 @@ const Discuss = () => {
                             </div>
                         ))
                     ) : (
-                        <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-10 text-center text-slate-400">No discussions yet.</div>
+                        <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-10 text-center text-slate-400">No discussions yet.</div>
                     )}
                 </div>
                 </section>
@@ -104,3 +104,4 @@ const Discuss = () => {
 };
 
 export default Discuss;
+

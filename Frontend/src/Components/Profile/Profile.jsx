@@ -31,12 +31,12 @@ const Profile = () => {
   return (
     <>
       <Header user={user} />
-      <div className="min-h-screen bg-slate-950 px-5 py-8 text-white lg:px-8">
+      <div className="min-h-screen bg-slate-800 px-5 py-8 text-white lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-7 lg:grid-cols-[360px_1fr]">
         <UserDetails user={user} />
         
         <div className="space-y-6">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+          <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20">
             <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Profile</p>
             <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
@@ -50,7 +50,7 @@ const Profile = () => {
           </div>
 
           <ProblemStats user={user} />
-          <div className="flex rounded-2xl border border-white/10 bg-slate-900/70 p-1">
+          <div className="flex rounded-2xl border border-white/10 bg-slate-950/70 p-1">
             <button
                 onClick={() => setActiveTab('submissions')}
                 className={`flex-1 rounded-xl px-4 py-3 text-sm font-black transition ${activeTab === 'submissions' ? 'bg-cyan-300 text-slate-950' : 'text-slate-500 hover:bg-slate-900 hover:text-slate-200'}`}
@@ -65,7 +65,7 @@ const Profile = () => {
             </button>
             
           </div>
-            <div className='rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-2xl shadow-black/20'>
+            <div className='rounded-3xl border border-white/10 bg-slate-950/70 p-4 shadow-2xl shadow-black/20'>
                 {activeTab === 'tweets' ? (
                     <UserTweets user={user} />
                 ) : (
@@ -80,3 +80,4 @@ const Profile = () => {
 };
 
 export default Profile;
+

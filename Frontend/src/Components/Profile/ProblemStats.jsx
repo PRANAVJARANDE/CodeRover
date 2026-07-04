@@ -12,7 +12,7 @@ function ProblemStats({user}) {
         {label:'Hard',value:user.hardCount,total:problems.hard,color:'bg-red-400',text:'text-red-300'},
     ];
     return (
-        <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+        <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20">
                 <div className="mb-5 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-white">Problem Stats</h2>
                     <span className="rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-cyan-200">
@@ -40,3 +40,4 @@ function ProblemStats({user}) {
 }
 
 export default ProblemStats
+

@@ -7,13 +7,14 @@ import { runExampleCasesService } from '../../Services/CodeRun.service.js';
 import Executing from '../Editor/Executing.jsx'
 import ExampleCasesOutput from '../Editor/ExampleCasesOutput.jsx';
 import { useLocation } from 'react-router-dom';
-import ReactPlayer from 'react-player'
 import { defaultCodes } from './helper.js';
 import { toast } from 'react-hot-toast';
 import peer from '../../Services/peer.js';
 import Loading from '../Loading/Loading.jsx';
-import { getInterviewByRoomIdService, updateInterviewRoomStateService } from '../../Services/Interview.service.js';
 import { getPreJoinEnvironmentCheck } from '../../Services/Proctor.service.js';
+import StreamVideo from './StreamVideo.jsx';
+import { useLocalMedia } from './hooks/useLocalMedia.js';
+import { useInterviewRoomState } from './hooks/useInterviewRoomState.js';
 
 function Room() {
   const navigate=useNavigate();
@@ -31,8 +32,6 @@ function Room() {
   const [remoteUser,setremoteUser]=useState(null);
   const [remoteSocketId,setremoteSocketId]=useState(null);
   const remoteSocketIdRef=useRef(null);
-  const mystreamRef=useRef(null);
-  const mediaRequestRef=useRef(null);
   const callStartedRef=useRef(false);
   const handlingRemoteOfferRef=useRef(false);
   const makingOfferRef=useRef(false);
@@ -40,12 +39,18 @@ function Room() {
   const screenStreamRef=useRef(null);
   const [requsername,setrequestusername]=useState([]);
   const [connectionReady,setconnectionReady]=useState(false);
-  const [mystream,setMystream]=useState(null);
-  const [mediaReady,setMediaReady]=useState(false);
-  const [isAudioOn,setAudioOn]=useState(true);
-  const [isVideoOn,setVideoOn]=useState(true);
+  const {
+    mystream,
+    mystreamRef,
+    mediaReady,
+    isAudioOn,
+    setAudioOn,
+    isVideoOn,
+    setVideoOn,
+    ensureLocalStream,
+    stopLocalStream,
+  } = useLocalMedia();
   const [remoteMediaStatus,setRemoteMediaStatus]=useState({audioOn:true,videoOn:true});
-  const [roomStateLoaded,setRoomStateLoaded]=useState(false);
   const [screenStream,setScreenStream]=useState(null);
   const [remoteScreenStream,setRemoteScreenStream]=useState(null);
   const [remoteScreenAvailable,setRemoteScreenAvailable]=useState(false);
@@ -57,8 +62,6 @@ function Room() {
   const extraInfo = location.state;
   const proctorCheckRef=useRef(extraInfo?.proctorCheck || null);
   const verificationVideoRef=useRef(extraInfo?.verificationVideo || null);
-  const [roomParticipantRole,setRoomParticipantRole]=useState(extraInfo?.role || null);
-  const [previlige,setprevilige]=useState(false);
   const socket=useSocket();
   const [peerVersion,setPeerVersion]=useState(0);
   const redirectingAfterRefresh=useRef(
@@ -77,105 +80,23 @@ function Room() {
     setremoteSocketId(id);
   },[]);
 
-  const ensureLocalStream=useCallback(async()=>{
-    if(mystreamRef.current)return mystreamRef.current;
-    if(mediaRequestRef.current)return mediaRequestRef.current;
-
-    mediaRequestRef.current=(async()=>{
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        mystreamRef.current=stream;
-        setMystream(stream);
-        setMediaReady(true);
-        return stream;
-      } catch (error) {
-        console.error("Unable to access camera/microphone", error);
-
-        try {
-          const audioOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          mystreamRef.current=audioOnlyStream;
-          setMystream(audioOnlyStream);
-          setMediaReady(true);
-          setVideoOn(false);
-          toast.error("Camera is busy, joining with microphone only");
-          return audioOnlyStream;
-        } catch (audioError) {
-          console.error("Unable to access microphone", audioError);
-          toast.error("Please close other apps using camera/mic, then rejoin the call");
-          setAudioOn(false);
-          setVideoOn(false);
-          setMediaReady(true);
-          return null;
-        }
-      } finally {
-        mediaRequestRef.current=null;
-      }
-    })();
-
-    return mediaRequestRef.current;
-  },[]);
-
-  useEffect(()=>{
-      if(redirectingAfterRefresh)return;
-      let cancelled=false;
-      const initializeRoom=async()=>{
-      const nonparsedUser = localStorage.getItem('user');
-      const user = JSON.parse(nonparsedUser);
-      let resolvedRole=extraInfo?.role || null;
-      const isLegacyHostState=(extraInfo?.user && extraInfo.user._id===user._id) || (extraInfo && extraInfo._id===user._id);
-
-      if(!resolvedRole && isLegacyHostState)
-      {
-        resolvedRole='interviewer';
-      }
-
-      const interview=await getInterviewByRoomIdService(roomId);
-      if(cancelled)return;
-
-      if(interview?.roomState)
-      {
-        const {code: savedCode, language: savedLanguage, question: savedQuestion, cases: savedCases, exampleCasesExecution: savedExecution}=interview.roomState;
-        const nextLanguage=savedLanguage || 'cpp';
-        setLanguage(nextLanguage);
-        setCode(typeof savedCode === 'string' && savedCode.length ? savedCode : defaultCodes[nextLanguage] || defaultCodes.cpp);
-        setquestion(savedQuestion || "");
-        if(Array.isArray(savedCases) && savedCases.length)
-        {
-          setCases(savedCases);
-        }
-        if(savedExecution)
-        {
-          setExampleCasesExecution(savedExecution);
-        }
-      }
-
-      if(!resolvedRole && interview)
-      {
-        if(user.email===interview.interviewer.email) resolvedRole='interviewer';
-        else if(user.email===interview.interviewee.email) resolvedRole='interviewee';
-      }
-
-      setRoomParticipantRole(resolvedRole);
-      setprevilige(resolvedRole==='interviewer');
-      setRoomStateLoaded(true);
-
-      if(extraInfo?.remoteSocketId)
-      {
-          updateRemoteSocketId(extraInfo.remoteSocketId);
-          setconnectionReady(true);
-      }
-      else if(typeof extraInfo === 'string')
-      {
-          updateRemoteSocketId(extraInfo);
-          setconnectionReady(true);
-      }
-      };
-
-      initializeRoom();
-      return ()=>{
-        cancelled=true;
-      };
-  },[extraInfo, redirectingAfterRefresh, roomId, updateRemoteSocketId]);
+  const { roomParticipantRole, previlige } = useInterviewRoomState({
+    roomId,
+    extraInfo,
+    redirectingAfterRefresh,
+    updateRemoteSocketId,
+    setconnectionReady,
+    code,
+    language,
+    question,
+    cases,
+    exampleCasesExecution,
+    setCode,
+    setLanguage,
+    setquestion,
+    setCases,
+    setExampleCasesExecution,
+  });
 
   useEffect(()=>{
     if(!redirectingAfterRefresh)return;
@@ -220,19 +141,6 @@ function Room() {
     setrequestusername([]);
     socket.emit('host:req_accepted',{ta:socket.id,user:request.user,room:roomId,id:request.id,requser_id:request.requser_id});
   },[requsername, roomId, socket, updateRemoteSocketId]);
-
-  const stopLocalStream=useCallback(()=>{
-    if (mystreamRef.current) {
-      const tracks = mystreamRef.current.getTracks();
-      tracks.forEach(track => {
-        track.stop();
-      });
-    }
-    mystreamRef.current=null;
-    mediaRequestRef.current=null;
-    setMystream(null);
-    setMediaReady(false);
-  },[]);
 
   const help1=useCallback(()=>{
     stopLocalStream();
@@ -338,7 +246,7 @@ function Room() {
     } finally {
       makingOfferRef.current=false;
     }
-  },[socket])
+  },[mystreamRef,socket])
 
   useEffect(()=>{
     const currentPeer=peer.peer;
@@ -383,7 +291,7 @@ function Room() {
     };
 
     startCallWhenReady();
-  },[connectionReady, mediaReady, previlige, redirectingAfterRefresh, remoteSocketId, socket])
+  },[connectionReady, mediaReady, mystreamRef, previlige, redirectingAfterRefresh, remoteSocketId, socket])
 
   const sendMediaStatus=useCallback((audioOn=isAudioOn,videoOn=isVideoOn)=>{
     if(remoteSocketIdRef.current)
@@ -413,7 +321,7 @@ function Room() {
     await peer.setLocalDescription(answer);
     peer.prepareConnection(mystreamRef.current);
     sendMediaStatus();
-  },[sendMediaStatus, updateRemoteSocketId])
+  },[mystreamRef, sendMediaStatus, updateRemoteSocketId])
 
   const handleNegotiationIncomming=useCallback(async({from,offer})=>{
     updateRemoteSocketId(from);
@@ -425,7 +333,7 @@ function Room() {
     } finally {
       handlingRemoteOfferRef.current=false;
     }
-  },[socket, updateRemoteSocketId])
+  },[mystreamRef, socket, updateRemoteSocketId])
   
   const handleFinalNego=useCallback(async({ans})=>{
     await peer.setLocalDescription(ans)
@@ -609,23 +517,6 @@ function Room() {
       socket.emit('language:change',{remoteSocketId,language:newLanguage});
   };
 
-  useEffect(()=>{
-    if(redirectingAfterRefresh || !roomStateLoaded)return;
-    const autosaveTimer=setTimeout(()=>{
-      updateInterviewRoomStateService(roomId,{
-        code,
-        language,
-        question,
-        cases,
-        exampleCasesExecution,
-      });
-    },600);
-
-    return ()=>{
-      clearTimeout(autosaveTimer);
-    };
-  },[cases, code, exampleCasesExecution, language, question, redirectingAfterRefresh, roomId, roomStateLoaded]);
-
   const [theme, setTheme] = useState('vs-dark');
   const handleThemeChange = (newTheme) => {
       setTheme(newTheme);
@@ -744,8 +635,8 @@ function Room() {
   }
 
   return (
-    <div className="h-screen p-6 bg-gray-800 flex text-white justify-evenly">
-      <div className='bg-gray-900 p-6 rounded-lg w-1/4 flex flex-col'>
+    <div className="min-h-screen bg-slate-800 p-5 text-white lg:flex lg:gap-5">
+      <div className='rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20 lg:w-1/4 lg:min-w-[300px]'>
         <div className="flex flex-col space-y-6">
           <div className="flex items-center justify-evenly space-x-4">
           <button className="bg-red-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition" onClick={exitroom}>
@@ -760,12 +651,12 @@ function Room() {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-2xl font-extrabold text-gray-300 text-center">Test Cases</h3>
+            <h3 className="text-2xl font-extrabold text-slate-100 text-center">Test Cases</h3>
             {executing ? <Executing text={"Executing"}/> :
             <>
               {exampleCasesExecution ? 
               <>
-                <div className='bg-gray-700 rounded-lg p-2'>
+                <div className='rounded-2xl border border-white/10 bg-slate-800 p-2'>
                   <ExampleCasesOutput exampleCasesExecution={exampleCasesExecution}/>
                 </div>
                 <button className='px-2 py-1 rounded-lg bg-blue-600 text-white' onClick={()=>{
@@ -773,14 +664,14 @@ function Room() {
                 }}>Reset Testcases</button>
               </>: 
               <>{cases.map((exampleCase, index) => (
-            <div key={exampleCase.id} className="bg-gray-700 p-4 rounded-lg shadow-md space-y-2">
+            <div key={exampleCase.id} className="rounded-2xl border border-white/10 bg-slate-800 p-4 shadow-md space-y-2">
               <div>
                 <label className="pb-1 block text-sm font-medium text-gray-300">Input</label>
                 <input
                   type="text"
                   value={exampleCase.input}
                   onChange={(e) => handleInputChange(index, 'input', e.target.value)}
-                  className="w-full p-2 rounded-md bg-gray-800 text-white border border-gray-600"
+                  className="w-full rounded-xl border border-white/10 bg-slate-900 p-2 text-white outline-none focus:border-cyan-300/50"
                 />
               </div>
               <div>
@@ -789,7 +680,7 @@ function Room() {
                   type="text"
                   value={exampleCase.output}
                   onChange={(e) => handleInputChange(index, 'output', e.target.value)}
-                  className="w-full p-2 rounded-md bg-gray-800 text-white border border-gray-600"
+                  className="w-full rounded-xl border border-white/10 bg-slate-900 p-2 text-white outline-none focus:border-cyan-300/50"
                 />
               </div>
             </div>
@@ -797,30 +688,30 @@ function Room() {
             }
           </>
           }
-          <div className="bg-gray-800 p-2 rounded-lg shadow-lg">
+          <div className="rounded-2xl border border-white/10 bg-slate-800 p-2 shadow-lg">
             <Timer previlige={previlige} remoteSocketId={remoteSocketId}/>
           </div>
           </div>
         </div>
       </div>
 
-      <div className="px-6 bg-gray-900 mx-8 rounded-lg p-8 w-1/2">
-        <div className="bg-gray-900 rounded-lg shadow-md relative h-full">
+      <div className="mt-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20 lg:mt-0 lg:flex-1">
+        <div className="relative h-full rounded-2xl bg-slate-900">
         <div>
-          <div className="flex justify-between items-center bg-gray-900 border-b-2 border-gray-700 pb-4">
+          <div className="flex justify-between items-center border-b border-white/10 bg-slate-900 pb-4">
             <div className="flex space-x-4 ">
-            <button onClick={clickRun} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+            <button onClick={clickRun} className="rounded-full bg-emerald-400 px-5 py-2 font-black text-slate-950 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
               >
               Run
             </button>
-            <button onClick={dropdownqs} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            <button onClick={dropdownqs} className="rounded-full bg-cyan-300 px-5 py-2 font-black text-slate-950 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-300"
               >
               Question
             </button>
             {!previlige && connectionReady && (
               <button
                 onClick={screenStream ? stopScreenShare : startScreenShare}
-                className={`px-4 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 ${screenStream ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'}`}
+                className={`rounded-full px-5 py-2 font-black shadow-md focus:outline-none focus:ring-2 ${screenStream ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500' : 'bg-violet-500 text-white hover:bg-violet-600 focus:ring-violet-400'}`}
               >
                 {screenStream ? 'Stop Share' : 'Share Screen'}
               </button>
@@ -828,7 +719,7 @@ function Room() {
             {previlige && remoteScreenAvailable && (
               <button
                 onClick={()=>setShowRemoteScreen(true)}
-                className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="rounded-full bg-violet-500 px-5 py-2 font-black text-white shadow-md transition hover:bg-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-400"
               >
                 View Screen
               </button>
@@ -904,17 +795,10 @@ function Room() {
                   </div>
                   <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2">
                     {remoteScreenStream ? (
-                      <video
-                        ref={videoRef => {
-                          if (videoRef && remoteScreenStream) {
-                            videoRef.srcObject = remoteScreenStream;
-                          }
-                        }}
-                        autoPlay
-                        playsInline
+                      <StreamVideo
+                        stream={remoteScreenStream}
                         muted
                         className="max-h-full max-w-full object-contain"
-                        style={{ width: 'auto', height: 'auto' }}
                       />
                     ) : (
                       <p className="text-gray-400">Waiting for shared screen...</p>
@@ -927,7 +811,7 @@ function Room() {
           </div>
           <div className="flex space-x-4 items-center  rounded-t-lg">
             <select onChange={(e) => handleLanguageChange(e.target.value)}value={language}
-                className="p-1 text-white bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring focus:ring-blue-500"
+                className="rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-white outline-none focus:border-cyan-300/50"
             >
               <option value="cpp">C++</option>
                   <option value="c">C</option>
@@ -938,7 +822,7 @@ function Room() {
               <select
                   onChange={(e) => handleThemeChange(e.target.value)}
                   value={theme}
-                  className="p-1 text-white bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring focus:ring-blue-500"
+                  className="rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-white outline-none focus:border-cyan-300/50"
               >
                   <option value="vs-dark">Dark</option>
                   <option value="light">Light</option>
@@ -946,7 +830,7 @@ function Room() {
               </select>
           </div>
         </div>
-        <div className="p-5 bg-gray-800 rounded-lg shadow-lg my-4">
+        <div className="my-4 rounded-2xl border border-white/10 bg-slate-800 p-4 shadow-lg">
           <Editor height="63vh" width="100%"
               language={language}
               value={code}
@@ -964,16 +848,16 @@ function Room() {
           </div>
       </div>
     
-      <div className='w-1/4 h-full bg-gray-900 p-6 rounded-lg'>
+      <div className='mt-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-black/20 lg:mt-0 lg:w-1/4 lg:min-w-[300px]'>
   {connectionReady ? (
     <>
-      <div className="bg-gray-800 h-full p-4 w-full rounded-lg shadow-md flex flex-col justify-evenly items-center space-y-6">
+      <div className="flex h-full w-full flex-col items-center justify-evenly space-y-6 rounded-2xl bg-slate-900/80 p-4 shadow-md">
     
-        <div className="w-full bg-gray-900 p-4 rounded-lg">
+        <div className="w-full rounded-2xl border border-white/10 bg-slate-900 p-4">
           <div className="mb-3 text-center">
             <h3 className="text-xl font-semibold text-white">{remoteUser? remoteUser.fullname : 'Interviewer'}</h3>
           </div>
-          <div className="relative bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+          <div className="relative flex h-48 w-full items-center justify-center rounded-2xl border border-white/10 bg-slate-800 text-white shadow-inner">
             <div className={`absolute right-2 top-2 z-10 flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${remoteMediaStatus.audioOn ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`}>
               <img className="h-4 w-4" src={remoteMediaStatus.audioOn ? '/micon.png' : '/micoff.png'} alt={remoteMediaStatus.audioOn ? 'Unmuted' : 'Muted'} />
               <span>{remoteMediaStatus.audioOn ? 'Unmuted' : 'Muted'}</span>
@@ -981,16 +865,10 @@ function Room() {
             {!remoteMediaStatus.videoOn ? (
               <p className="text-gray-400">Video turned off</p>
             ) : remoteStream ? (
-              <video
-                ref={videoRef => {
-                  if (videoRef && remoteStream) {
-                    videoRef.srcObject = remoteStream;
-                    videoRef.muted = false;
-                  }
-                }}
-                autoPlay
-                playsInline
-                className="rounded-lg h-full w-full"
+              <StreamVideo
+                stream={remoteStream}
+                muted={false}
+                className="h-full w-full rounded-lg object-cover"
               />
               ) : (
                 <p className="text-gray-400">Waiting for video</p>
@@ -998,23 +876,20 @@ function Room() {
           </div>
         </div>
 
-        <div className="w-full bg-gray-900 p-4 rounded-lg">
+        <div className="w-full rounded-2xl border border-white/10 bg-slate-900 p-4">
           <div className="mb-3 text-center">
             <h3 className="text-xl font-semibold text-white">You</h3>
           </div>
-          <div className="relative bg-gray-900 h-48 w-full rounded-lg flex justify-center items-center text-white shadow-inner border border-gray-700">
+          <div className="relative flex h-48 w-full items-center justify-center rounded-2xl border border-white/10 bg-slate-800 text-white shadow-inner">
             <div className={`absolute right-2 top-2 z-10 flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${isAudioOn ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`}>
               <img className="h-4 w-4" src={isAudioOn ? '/micon.png' : '/micoff.png'} alt={isAudioOn ? 'Unmuted' : 'Muted'} />
               <span>{isAudioOn ? 'Unmuted' : 'Muted'}</span>
             </div>
-            {isVideoOn ? (
-              <ReactPlayer 
-                playing={isVideoOn} 
-                muted={!isAudioOn}
-                height="100%" 
-                width="100%" 
-                url={mystream}
-                className="rounded-lg"
+            {isVideoOn && mystream ? (
+              <StreamVideo
+                stream={mystream}
+                muted
+                className="h-full w-full rounded-lg object-cover"
               />
             ) : (
               <p className="text-gray-400">Video turned off</p>
@@ -1025,22 +900,22 @@ function Room() {
     </>
   ) : previlige ? (
     <>
-      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
+      <div className='mb-6 flex items-center justify-between rounded-2xl bg-emerald-400 p-3 text-slate-950'>
             <p className="text-3xl font-bold text-center">Room: {roomId}</p>
             {copySuccess? <>
               <p className="text-lg text-white text-center">Copied!</p>
             </>:
-            <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
+            <button onClick={handleCopy} className="ml-4 rounded-xl bg-white px-3 py-2 transition-all hover:bg-cyan-100">
               <img className='w-6' src='/copy.png'/>
             </button>
             }
       </div>
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+      <div className="rounded-2xl border border-white/10 bg-slate-800 p-5 text-white shadow-lg">
         <p className="text-lg font-semibold mb-4">Join Requests</p>
         {requsername.length ? (
           <>
           {requsername.map((x,index)=>(
-            <div key={index} className="space-y-4 rounded-lg bg-gray-700 p-4 shadow-md">
+            <div key={index} className="space-y-4 rounded-2xl border border-white/10 bg-slate-900 p-4 shadow-md">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <img className='h-10 w-10 rounded-full border-gray-50 border-2' src={x.user.avatar}/>
@@ -1051,12 +926,12 @@ function Room() {
                 </div>
                 <button 
                   onClick={()=>{acceptrequest(index)}} 
-                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out"
+                  className="rounded-full bg-emerald-400 px-4 py-2 font-black text-slate-950 shadow-md transition hover:bg-white"
                 >
                   Accept
                 </button>
               </div>
-              <div className="rounded-lg border border-gray-600 bg-gray-800 p-3 text-sm">
+              <div className="rounded-2xl border border-white/10 bg-slate-800 p-3 text-sm">
                 <p className="mb-2 font-semibold text-blue-300">Pre-join check</p>
                 {x.proctorCheck ? (
                   <div className="space-y-2 text-gray-300">
@@ -1078,7 +953,7 @@ function Room() {
                   <p className="text-gray-400">No pre-join check received.</p>
                 )}
               </div>
-              <div className="rounded-lg border border-gray-600 bg-gray-800 p-3 text-sm">
+              <div className="rounded-2xl border border-white/10 bg-slate-800 p-3 text-sm">
                 <p className="mb-2 font-semibold text-yellow-300">Verification video</p>
                 {x.verificationVideo ? (
                   <div className="space-y-2 text-gray-300">
@@ -1121,17 +996,17 @@ function Room() {
     </>
   ) : (
     <>
-      <div className='bg-green-600 mb-6 p-2 rounded-xl flex justify-between items-center'>
+      <div className='mb-6 flex items-center justify-between rounded-2xl bg-emerald-400 p-3 text-slate-950'>
             <p className="text-3xl font-bold text-center">Room: {roomId}</p>
             {copySuccess? <>
               <p className="text-lg text-white text-center">Copied!</p>
             </>:
-            <button onClick={handleCopy} className="bg-white text-white px-3 py-1 rounded-lg ml-4 hover:bg-blue-200 transition-all">
+            <button onClick={handleCopy} className="ml-4 rounded-xl bg-white px-3 py-2 transition-all hover:bg-cyan-100">
               <img className='w-6' src='/copy.png'/>
             </button>
             }
       </div>
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg text-white">
+      <div className="rounded-2xl border border-white/10 bg-slate-800 p-5 text-white shadow-lg">
         <p className="text-lg font-semibold mb-4">Waiting for interviewer</p>
         <p className="text-gray-400">You are in the room. The call will start after the interviewer accepts your request.</p>
       </div>
@@ -1146,3 +1021,4 @@ function Room() {
 }
 
 export default Room;
+

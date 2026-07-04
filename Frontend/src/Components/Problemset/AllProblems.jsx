@@ -38,9 +38,9 @@ const AllProblems = () => {
 
     if(!problems)return <Loading/>
     return (
-        <div className="min-h-screen bg-slate-950 px-5 py-10 text-white lg:px-8">
+        <div className="min-h-screen bg-slate-800 px-5 py-10 text-white lg:px-8">
             <div className="mx-auto max-w-7xl">
-                <div className="mb-8 rounded-3xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-black/20">
+                <div className="mb-8 rounded-3xl border border-white/10 bg-slate-950/70 p-8 shadow-2xl shadow-black/20">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <p className="text-sm font-black uppercase tracking-[0.3em] text-cyan-300">Problemset</p>
@@ -83,8 +83,8 @@ const AllProblems = () => {
                     </select>
                 </div>
 
-                <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-2xl shadow-black/20">
-                    <div className="grid grid-cols-[1fr_150px_120px] border-b border-white/10 bg-slate-900/70 px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20">
+                    <div className="grid grid-cols-[1fr_150px_120px] border-b border-white/10 bg-slate-950/70 px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
                         <span>Title</span>
                         <span className="text-center">Difficulty</span>
                         <span className="text-center">Status</span>
@@ -129,3 +129,4 @@ const AllProblems = () => {
 };
 
 export default AllProblems;
+

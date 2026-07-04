@@ -5,7 +5,7 @@ function UserDetails({user}) {
     const navigate=useNavigate();
     return (
         <>
-            <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/20 lg:sticky lg:top-28 lg:h-fit">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20 lg:sticky lg:top-28 lg:h-fit">
                 <div className="flex flex-col items-center">
                 <img src={user.avatar || '/defaultuser.png'} alt="User Avatar" className="h-48 w-48 rounded-3xl border border-white/10 object-cover shadow-2xl shadow-black/30" />
                 <h2 className="mt-5 text-center text-2xl font-black text-white">{user.fullname}</h2>
@@ -33,3 +33,4 @@ function UserDetails({user}) {
 }
 
 export default UserDetails
+

@@ -8,17 +8,6 @@ import {Submission} from '../models/submission.model.js'
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 
-function getExtension(language) {
-    switch (language) {
-        case 'c': return 'c';
-        case 'cpp': return 'cpp';
-        case 'python': return 'py';
-        case 'java': return 'java';
-        default: 
-            throw new ApiError(400,"Unsupported Language");
-    }
-}
-
 const runCode = asyncHandler(async (req, res) => {
     const {language,code,input} = req.body;
     let filename;
@@ -31,7 +20,8 @@ const runCode = asyncHandler(async (req, res) => {
         saveInputFiles(input,filename);
         await runCompilerDockerContainer(filename,language,res);
     } catch (error) {
-        return res.status(400).json(new ApiResponse(400,error,"Error"));
+        const statusCode = error.statusCode || 400;
+        return res.status(statusCode).json(new ApiResponse(statusCode,null,error.message || "Error"));
     }
 });
 
@@ -39,8 +29,12 @@ const run_example_cases=asyncHandler(async(req,res)=>{
     const {language,code,example_cases}=req.body;
     let filename;
     try {
+        if(!Array.isArray(example_cases))
+        {
+            throw new ApiError(400,"Example cases must be an array");
+        }
         validateCode(language,code);
-        example_cases.map(x => {
+        example_cases.forEach(x => {
             validateInput(language,x?.input);
         });
         console.log("code and input is validated");
@@ -49,7 +43,8 @@ const run_example_cases=asyncHandler(async(req,res)=>{
         const response=await runExampleCasesDockerContainer(example_cases,language,filename,res);
         return res.status(response.statusCode).json(new ApiResponse(response.statusCode,response,"Executed Successfully"));
     } catch (error) {
-        throw new ApiError(500,"Server error");
+        const statusCode = error.statusCode || 500;
+        return res.status(statusCode).json(new ApiResponse(statusCode,null,error.message || "Server error"));
     }
 });
 
@@ -59,6 +54,10 @@ const runtestcases = asyncHandler(async (req, res) => {
     try {
         validateCode(language, code);
         const problem = await Problem.findById(problem_id).select("test_cases");
+        if(!problem)
+        {
+            throw new ApiError(404,"Problem not found");
+        }
         problem.test_cases.forEach(x => {
             validateInput(language, x.input);
         });
@@ -80,7 +79,8 @@ const runtestcases = asyncHandler(async (req, res) => {
         return res.status(submissionStatus.statusCode).json(new ApiResponse(submissionStatus.statusCode, submissionStatus, "Executed Successfully"));
 
     } catch (error) {
-        throw new ApiError(500,"Server error");
+        const statusCode = error.statusCode || 500;
+        return res.status(statusCode).json(new ApiResponse(statusCode,null,error.message || "Server error"));
     }
 });
  

@@ -1,6 +1,12 @@
 import { toast } from 'react-hot-toast';
 const backendURL = import.meta.env.VITE_BACKEND_URL;
 
+const notifyAuthChanged = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('coderover:auth-changed'));
+  }
+};
+
 export const loginUser = async (userData) => {
   try {
     const response = await fetch(`${backendURL}/users/login`, {
@@ -15,6 +21,7 @@ export const loginUser = async (userData) => {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+      notifyAuthChanged();
       toast.success("Logged in");
       return true;
     } 
@@ -102,6 +109,7 @@ export const logoutUser = async () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      notifyAuthChanged();
       toast.success("Logged out");
       return true;
     } else {
@@ -159,10 +167,9 @@ export const refreshTokenService = async () => {
     const data = await response.json();
     if (response.status === 200) {
       const {refreshToken,accessToken}=data.data;
-      console.log("New RT-",refreshToken);
-      console.log("New AT-",accessToken);
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      notifyAuthChanged();
       return true;
     } 
     else 
@@ -170,6 +177,7 @@ export const refreshTokenService = async () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      notifyAuthChanged();
       return false;
     }
   } catch (error) {
