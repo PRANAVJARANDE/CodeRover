@@ -25,8 +25,7 @@ function Reply({ replyOf = '', onReplySuccess }) {
                 toast.success('Tweet Created');
                 setContent('');
                 setFile(null);
-                onReplySuccess(); // Trigger the callback on successful tweet/reply
-                navigate('/discuss');
+                onReplySuccess?.();
             }
         };
 

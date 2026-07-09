@@ -3,13 +3,25 @@ import Reply from '../Discuss/Reply.jsx';
 import { fetchProblemTweets } from '../../Services/Tweet.service.js';
 function DiscussProblem({id}) {
     const [tweets, setTweets] = useState([]);
+    const [refreshKey, setRefreshKey] = useState(0);
+
     useEffect(()=>{
+        let cancelled=false;
         const helper=async()=>{
             const response=await fetchProblemTweets(id);
-            if(response)setTweets(response);
+            if(!cancelled)setTweets(response || []);
         }
         helper();
-    });
+
+        return ()=>{
+            cancelled=true;
+        };
+    },[id, refreshKey]);
+
+    const refreshTweets=()=>{
+        setRefreshKey((key)=>key+1);
+    };
+
     return (
         <div className='min-h-screen flex flex-col'>
             <div className="space-y-6 mt-4 mb-10">
@@ -36,7 +48,7 @@ function DiscussProblem({id}) {
                 )}
             </div>
             <div className='bg-black p-4 my-6 rounded-lg'>
-                <Reply replyOf={id}/>
+                <Reply replyOf={id} onReplySuccess={refreshTweets}/>
             </div>
         </div>
     )

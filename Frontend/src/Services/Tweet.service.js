@@ -3,7 +3,7 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
 
 export const fetchTweets=async () => {
   try {
-    const response = await fetch(`${backendURL}/tweet`, {
+    const response = await fetch(`${backendURL}/tweet/discuss`, {
       method: 'GET',
       headers: { 
         'Content-Type': 'application/json' ,
@@ -17,6 +17,28 @@ export const fetchTweets=async () => {
     return false; 
   } 
   catch (error) 
+  {
+    toast.error('Server Error');
+    console.error(error);
+    return false;
+  }
+};
+
+export const deleteTweetService = async (tweetId) => {
+  try {
+    const response = await fetch(`${backendURL}/tweet/${tweetId}`, {
+      method: 'DELETE',
+    });
+
+    const data = await response.json();
+    if (response?.status === 200) {
+      return data.data;
+    }
+
+    toast.error(data?.message || 'Server Error');
+    return false;
+  }
+  catch (error)
   {
     toast.error('Server Error');
     console.error(error);

@@ -14,7 +14,7 @@ function Submissions({ problem_id,displayproblem}) {
             setLoading(false); 
         };
         fetchSubmissions();
-    }, []);
+    }, [problem_id]);
 
     return (
         <div className="max-h-screen overflow-y-auto">
@@ -25,10 +25,8 @@ function Submissions({ problem_id,displayproblem}) {
             <p className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 text-center text-xl font-extrabold text-white">No submissions</p>
         ) : (
             <div className="space-y-4">
-                {submissions.map((submission, index) => (
-                    <>
-                    <SubmissionCard key={index} submission={submission} displayproblem={displayproblem}/>
-                    </>
+                {submissions.map((submission) => (
+                    <SubmissionCard key={submission._id} submission={submission} displayproblem={displayproblem}/>
                 ))}
             </div>
         )

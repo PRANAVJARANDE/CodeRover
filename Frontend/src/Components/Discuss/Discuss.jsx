@@ -6,15 +6,24 @@ import Loading from '../Loading/Loading.jsx';
 const Discuss = () => {
     const [tweets, setTweets] = useState(null);
     const [replyToTweetId, setReplyToTweetId] = useState(null);
-    const [hasNewReply, setHasNewReply] = useState(false); 
+    const [refreshKey, setRefreshKey] = useState(0); 
     
     useEffect(() => {
+        let cancelled=false;
         const helper = async () => {
             const response = await fetchTweets();
-            setTweets(response);
+            if(!cancelled)setTweets(response || []);
         };
         helper();
-    }, [replyToTweetId, hasNewReply]);  
+
+        return ()=>{
+            cancelled=true;
+        };
+    }, [refreshKey]);
+
+    const refreshTweets=()=>{
+        setRefreshKey((key)=>key+1);
+    };
 
     if (tweets === null) return (<Loading/>);
     return (
@@ -31,7 +40,7 @@ const Discuss = () => {
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="text-lg font-black text-white">Create post</h2>
                         </div>
-                        <Reply onReplySuccess={() => setHasNewReply(!hasNewReply)} />
+                        <Reply onReplySuccess={refreshTweets} />
                     </div>
                 </aside>
 
@@ -81,7 +90,7 @@ const Discuss = () => {
                                 )}
 
                                 {replyToTweetId === tweet._id && (
-                                    <Reply replyOf={replyToTweetId} onReplySuccess={() => setHasNewReply(!hasNewReply)} />
+                                    <Reply replyOf={replyToTweetId} onReplySuccess={refreshTweets} />
                                 )}
 
                                 <div className='flex justify-end'>
