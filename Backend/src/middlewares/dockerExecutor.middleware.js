@@ -1,43 +1,8 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
-import { fileURLToPath } from "url";
-import { ApiError } from "../utils/ApiError.js";
-import { ApiResponse } from "../utils/ApiResponse.js";
-import { languageConfig } from "../config/language.config.js";
-import { runWithDockerQueue } from "../utils/dockerExecutionQueue.js";
+import { cleanupDockerJobs, runDockerJob } from "./runDocker.middleware.js";
 
-const execFilePromise = promisify(execFile);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const backendRoot = path.resolve(__dirname,"../..");
-const jobRoot = path.join(os.tmpdir(),"coderover");
 const MAX_OUTPUT_BYTES = 64 * 1024;
-
-const getConfig = (language) => {
-    const config = languageConfig[language];
-    if(!config)
-    {
-        throw new ApiError(400,"Unsupported Language");
-    }
-    return config;
-};
-
-const readSavedCode = async(filename, language) => {
-    const config = getConfig(language);
-    const sourcePath = path.join(backendRoot,`${filename}.${config.extension}`);
-    return fs.readFile(sourcePath,"utf8");
-};
-
-const cleanupSavedFiles = async(filename, language) => {
-    const config = getConfig(language);
-    await Promise.allSettled([
-        fs.rm(path.join(backendRoot,`${filename}.${config.extension}`),{force:true}),
-        fs.rm(path.join(backendRoot,`${filename}.txt`),{force:true}),
-    ]);
-};
 
 const truncateOutput = (value = "") => {
     if(Buffer.byteLength(value,"utf8") <= MAX_OUTPUT_BYTES)
@@ -47,158 +12,160 @@ const truncateOutput = (value = "") => {
     return `${value.slice(0,MAX_OUTPUT_BYTES)}\n[Output truncated after 64KB]`;
 };
 
-const normalizeError = (error) => {
-    const stderr = truncateOutput(error.stderr || "");
-    const stdout = truncateOutput(error.stdout || "");
-
-    if(error.killed || error.signal === "SIGTERM")
-    {
-        return {status:"timeout", output:stdout, error:"Time limit exceeded"};
-    }
-
-    if(stderr.includes("Command terminated") || stderr.toLowerCase().includes("timeout"))
-    {
-        return {status:"timeout", output:stdout, error:"Time limit exceeded"};
-    }
-
-    return {status:"error", output:stdout, error:stderr || error.message || "Execution failed"};
+const readJobFile = async(job,...segments) => {
+    const value = await fs.readFile(path.join(job.jobDir,...segments),"utf8").catch(() => "");
+    return truncateOutput(value);
 };
 
-const runDockerJobNow = async({language,code,input,jobLabel}) => {
-    const config = getConfig(language);
-    const jobId = `${jobLabel}_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
-    const jobDir = path.join(jobRoot,jobId);
+const buildExecutionErrorResponse = (message) => ({
+    statusCode:403,
+    data:message || "Execution failed",
+});
 
-    await fs.mkdir(jobDir,{recursive:true});
-    await fs.writeFile(path.join(jobDir,config.fileName),code || "","utf8");
-    await fs.writeFile(path.join(jobDir,"input.txt"),input || "","utf8");
+const buildCaseResult = (testCase) => {
+    const actualOutput = testCase.output.trim();
+    const expectedOutput = (testCase.expectedOutput || "").trim();
+    return {
+        input:testCase.input,
+        expectedOutput,
+        actualOutput,
+        isMatch:actualOutput === expectedOutput,
+    };
+};
 
-    const dockerArgs = [
-        "run",
-        "--rm",
-        "--network","none",
-        "--cpus","0.5",
-        "--memory",config.memory,
-        "--pids-limit","64",
-        "--read-only",
-        "--tmpfs","/tmp:rw,size=64m",
-        "--security-opt","no-new-privileges",
-        "--cap-drop","ALL",
-        "--label","app=coderover",
-        "--label",`jobId=${jobId}`,
-        "-v",`${jobDir}:/workspace:rw`,
-        "-w","/workspace",
-        config.image,
-        "sh","-c",config.command,
-    ];
+const getCompileError = async(job,dockerResult) => {
+    const compileStatus = (await readJobFile(job,"compile_status.txt")).trim();
+    if(!compileStatus || compileStatus === "0")
+    {
+        return null;
+    }
 
-    try {
-        const result = await execFilePromise("docker",dockerArgs,{
-            timeout:10000,
-            maxBuffer:MAX_OUTPUT_BYTES * 2,
-            windowsHide:true,
+    const stderr = await readJobFile(job,"compile_stderr.txt");
+    const stdout = await readJobFile(job,"compile_stdout.txt");
+    return stderr || stdout || dockerResult.error;
+};
+
+const getCaseResults = async(job) => {
+    const results = [];
+
+    for(const [index,testCase] of job.cases.entries())
+    {
+        const statusText = (await readJobFile(job,"statuses",`${index}.txt`)).trim();
+        const exitCode = Number.parseInt(statusText,10);
+
+        results.push({
+            ...testCase,
+            output:await readJobFile(job,"outputs",`${index}.txt`),
+            error:await readJobFile(job,"errors",`${index}.txt`),
+            exitCode:Number.isFinite(exitCode) ? exitCode : null,
         });
-
-        return {
-            status:"success",
-            output:truncateOutput(result.stdout || ""),
-            error:truncateOutput(result.stderr || ""),
-        };
-    } catch (error) {
-        return normalizeError(error);
-    } finally {
-        await fs.rm(jobDir,{recursive:true,force:true});
     }
+
+    return results;
 };
 
-const runDockerJob = (job) => runWithDockerQueue(() => runDockerJobNow(job));
+const getCaseRuntimeError = (testCase,dockerResult) => {
+    if(testCase.exitCode === 0)
+    {
+        return null;
+    }
 
-export const runCompilerDockerContainer = async(filename, language, res) => {
+    if(testCase.exitCode === 124 || dockerResult.status === "timeout")
+    {
+        return "Time limit exceeded";
+    }
+
+    if(testCase.exitCode === null)
+    {
+        return dockerResult.error || "Execution failed";
+    }
+
+    return testCase.error || dockerResult.error || "Execution failed";
+};
+
+const runCaseContainer = async(job) => {
+    const dockerResult = await runDockerJob(job);
+    const compileError = await getCompileError(job,dockerResult);
+    if(compileError)
+    {
+        return {dockerResult, setupError:compileError, cases:[]};
+    }
+
+    return {
+        dockerResult,
+        setupError:null,
+        cases:await getCaseResults(job),
+    };
+};
+
+export const runCompilerDockerContainer = async(job) => {
     try {
-        const code = await readSavedCode(filename,language);
-        const input = await fs.readFile(path.join(backendRoot,`${filename}.txt`),"utf8").catch(()=>"");
-        const result = await runDockerJob({language,code,input,jobLabel:"single"});
-
+        const result = await runDockerJob(job);
         if(result.status === "success")
         {
-            return res.status(201).json(new ApiResponse(200,result.output,"Executed Successfully"));
+            return {
+                httpStatusCode:201,
+                statusCode:200,
+                data:result.output,
+                message:"Executed Successfully",
+            };
         }
 
-        return res.status(403).json(new ApiResponse(403,result,"Execution failed"));
+        return {
+            httpStatusCode:403,
+            statusCode:403,
+            data:result,
+            message:"Execution failed",
+        };
     } finally {
-        await cleanupSavedFiles(filename,language);
+        await cleanupDockerJobs([job]);
     }
 };
 
-export const runExampleCasesDockerContainer = async(examplecases, language, filename) => {
+export const runExampleCasesDockerContainer = async(exampleJob) => {
     try {
-        const code = await readSavedCode(filename,language);
-        const results = [];
+        const {dockerResult, setupError, cases} = await runCaseContainer(exampleJob);
+        if(setupError) return buildExecutionErrorResponse(setupError);
 
-        for(const example of examplecases)
-        {
-            const result = await runDockerJob({
-                language,
-                code,
-                input:example.input || "",
-                jobLabel:"example",
-            });
+        const runtimeError = cases.map((testCase) => getCaseRuntimeError(testCase,dockerResult)).find(Boolean);
+        if(runtimeError) return buildExecutionErrorResponse(runtimeError);
 
-            if(result.status !== "success")
-            {
-                return {statusCode:403,data:result.error || result.status};
-            }
-
-            const actualOutput = result.output.trim();
-            const expectedOutput = (example.output || "").trim();
-            results.push({
-                input:example.input,
-                expectedOutput,
-                actualOutput,
-                isMatch:actualOutput === expectedOutput,
-            });
-        }
-
-        return {statusCode:200,data:results};
+        return {statusCode:200,data:cases.map(buildCaseResult)};
     } catch (error) {
         return {statusCode:500,data:error.message || "Server error"};
     } finally {
-        await cleanupSavedFiles(filename,language);
+        await cleanupDockerJobs([exampleJob]);
     }
 };
 
-export const runTestCasesDokerContainer = async(testCases, language, filename) => {
+export const runTestCasesDokerContainer = async(testCaseJob) => {
     try {
-        const code = await readSavedCode(filename,language);
-        let failedTestCase = null;
+        const {dockerResult, setupError, cases} = await runCaseContainer(testCaseJob);
+        if(setupError) return buildExecutionErrorResponse(setupError);
 
-        for(const testCase of testCases)
+        const runtimeError = cases.map((testCase) => getCaseRuntimeError(testCase,dockerResult)).find(Boolean);
+        if(runtimeError) return buildExecutionErrorResponse(runtimeError);
+
+        const failedTestCase = cases
+            .map(buildCaseResult)
+            .find((testCase) => !testCase.isMatch);
+
+        if(failedTestCase)
         {
-            const result = await runDockerJob({
-                language,
-                code,
-                input:testCase.input || "",
-                jobLabel:"test",
-            });
-
-            if(result.status !== "success")
-            {
-                return {statusCode:403,data:result.error || result.status};
-            }
-
-            const output = result.output.trim();
-            const expectedOutput = (testCase.output || "").trim();
-            if(output !== expectedOutput)
-            {
-                failedTestCase = {input:testCase.input,output,expectedOutput};
-                break;
-            }
+            return {
+                statusCode:200,
+                data:{
+                    input:failedTestCase.input,
+                    output:failedTestCase.actualOutput,
+                    expectedOutput:failedTestCase.expectedOutput,
+                },
+            };
         }
 
-        return {statusCode:200,data:failedTestCase};
+        return {statusCode:200,data:null};
     } catch (error) {
         return {statusCode:500,data:error.message || "Server error"};
     } finally {
-        await cleanupSavedFiles(filename,language);
+        await cleanupDockerJobs([testCaseJob]);
     }
 };

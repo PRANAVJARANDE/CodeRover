@@ -8,47 +8,47 @@ const parsePositiveInt = (value, fallback) => {
 class DockerExecutionQueue {
     constructor(maxConcurrent) {
         this.maxConcurrent = maxConcurrent;
-        this.activeCount = 0;
-        this.waitingJobs = [];
+        this.runningJobs = 0;
+        this.waitingRequests = [];
     }
 
     async run(task) {
-        await this.acquire();
+        await this.waitForTurn();
         try {
             return await task();
         } finally {
-            this.release();
+            this.finishCurrentJob();
         }
     }
 
-    acquire() {
-        if(this.activeCount < this.maxConcurrent)
+    async waitForTurn() {
+        if(this.runningJobs < this.maxConcurrent)
         {
-            this.activeCount += 1;
-            return Promise.resolve();
-        }
-
-        return new Promise((resolve) => {
-            this.waitingJobs.push(resolve);
-        });
-    }
-
-    release() {
-        const nextJob = this.waitingJobs.shift();
-        if(nextJob)
-        {
-            nextJob();
+            this.runningJobs += 1;
             return;
         }
 
-        this.activeCount = Math.max(0,this.activeCount - 1);
+        await new Promise((resolve) => {
+            this.waitingRequests.push(resolve);
+        });
+    }
+
+    finishCurrentJob() {
+        const nextWaitingRequest = this.waitingRequests.shift();
+        if(nextWaitingRequest)
+        {
+            nextWaitingRequest();
+            return;
+        }
+
+        this.runningJobs = Math.max(0,this.runningJobs - 1);
     }
 
     getStats() {
         return {
             maxConcurrent:this.maxConcurrent,
-            activeCount:this.activeCount,
-            queuedCount:this.waitingJobs.length,
+            activeCount:this.runningJobs,
+            queuedCount:this.waitingRequests.length,
         };
     }
 }
@@ -64,6 +64,9 @@ export const getDockerExecutionQueue = () => {
     return dockerQueue;
 };
 
-export const runWithDockerQueue = (task) => getDockerExecutionQueue().run(task);
+export const runWithDockerQueue = async (task) => {
+    const queue = getDockerExecutionQueue();
+    return await queue.run(task);
+};
 
 export const getDockerQueueStats = () => getDockerExecutionQueue().getStats();

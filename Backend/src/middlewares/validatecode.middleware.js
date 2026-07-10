@@ -65,4 +65,61 @@ const validateInput = (language, userInput) => {
     }
 };
 
-export {validateCode,validateInput};
+const validateRunCodePayload = (req,res,next) => {
+    try {
+        const {language,code,input} = req.body;
+        validateCode(language,code);
+        validateInput(language,input);
+        console.log("code and input is validated");
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+const validateExampleCasesPayload = (req,res,next) => {
+    try {
+        const {language,code,example_cases} = req.body;
+        if(!Array.isArray(example_cases))throw new ApiError(400,"Example cases must be an array");
+        validateCode(language,code);
+        example_cases.forEach((example) => {
+            validateInput(language,example?.input);
+        });
+        console.log("code and input is validated");
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+const validateSubmitCodePayload = (req,res,next) => {
+    try {
+        const {language,code,problem_id} = req.body;
+        if(!problem_id)throw new ApiError(400,"Problem id is required");
+        validateCode(language,code);
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+const validateProblemTestCasesPayload = (req,res,next) => {
+    try {
+        req.problem.test_cases.forEach((testCase) => {
+            validateInput(req.body.language,testCase.input);
+        });
+        console.log("code and input is validated");
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+export {
+    validateCode,
+    validateInput,
+    validateRunCodePayload,
+    validateExampleCasesPayload,
+    validateSubmitCodePayload,
+    validateProblemTestCasesPayload,
+};
